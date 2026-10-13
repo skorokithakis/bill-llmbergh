@@ -1,5 +1,6 @@
 import type { Context } from "@earendil-works/chord";
 import { defineDoc, type Conversation, type Harness } from "@earendil-works/pi-durable";
+import { runningWorkers } from "./workers.ts";
 
 const TELEGRAM_API = "https://api.telegram.org";
 // Telegram rejects any message longer than this, so long outputs are split into several messages.
@@ -246,12 +247,8 @@ async function handleUpdate(
 }
 
 async function statusText(harness: Harness, context: Context): Promise<string> {
-	// A worker is a conversation owned by a task, so counting owned conversations counts the workers. The
-	// workers ticket replaces this with the worker registry and its ids and roles.
-	const graph = await harness.taskGraph(context);
-	let workers = 0;
-	for (const node of Object.values(graph.value.tasks)) workers += node.conversations.length;
-	graph.dispose();
+	// The workers ticket owns the registry, so /status reads it instead of counting task-owned conversations.
+	const workers = await runningWorkers(harness, context);
 
 	const usage = await harness.usage(context);
 	let cost = 0;
@@ -259,7 +256,8 @@ async function statusText(harness: Harness, context: Context): Promise<string> {
 	for (const bucket of Object.values(usage.tools)) cost += bucket.cost.total;
 
 	// Advisor calls are counted by the caps ticket, which owns the counters document; until then it is 0.
-	return `Workers running: ${workers}\nCost so far: $${cost.toFixed(4)}\nAdvisor calls today: 0`;
+	const workerLines = workers.map((worker) => `${worker.id} ${worker.role}`);
+	return `Workers running: ${workerLines.length === 0 ? "none" : `\n${workerLines.join("\n")}`}\nCost so far: $${cost.toFixed(4)}\nAdvisor calls today: 0`;
 }
 
 async function getUpdates(

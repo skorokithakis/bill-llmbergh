@@ -9,8 +9,9 @@ import { startHeartbeat } from "./heartbeat.ts";
 import { FOUNDER_PROMPT } from "./prompt.ts";
 import { createCompanyModels } from "./providers.ts";
 import { connectToWorkVm } from "./remote.ts";
-import { SupervisorExtension } from "./supervisor.ts";
+import { createSupervisorExtension } from "./supervisor.ts";
 import { isStopped, startTelegram } from "./telegram.ts";
+import { WorkerExtension } from "./workers.ts";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -24,7 +25,15 @@ async function main(): Promise<void> {
 
 	const registry = createRegistry();
 	registry.install(CodingTools);
-	registry.install(SupervisorExtension);
+	// The worker extension holds the shared worker prompt; the supervisor extension holds the founder's tools and the
+	// worker task definitions. Root conversations must not select the worker extension (it is removed below), and
+	// worker conversations select exactly CodingTools and the worker extension.
+	const supervisor = createSupervisorExtension({
+		defaultWorkerModel: config.models.defaultWorker,
+		maxParallelWorkers: config.maxParallelWorkers,
+	});
+	registry.install(WorkerExtension);
+	registry.install(supervisor);
 
 	const models = createCompanyModels(config, resolve(dataDir, "auth.json"));
 
@@ -43,8 +52,16 @@ async function main(): Promise<void> {
 	const root = await harness.root(context);
 	// Configured on every start, not just at creation, so a change to the prompt or model takes effect
 	// on the existing root conversation. Done before resume() so a run resumed from the previous
-	// process never makes a model call with the old prompt or model.
-	await root.configure({ model: config.models.founder, instructions: FOUNDER_PROMPT }, context);
+	// process never makes a model call with the old prompt or model. The worker extension is removed so the
+	// founder never sees the worker rules; every other installed extension still reaches it.
+	await root.configure(
+		{
+			model: config.models.founder,
+			instructions: FOUNDER_PROMPT,
+			extensions: { remove: [WorkerExtension] },
+		},
+		context,
+	);
 	harness.resume();
 
 	// A restart while /stop was in effect must not resume pending work, so abort again here. The heartbeat
