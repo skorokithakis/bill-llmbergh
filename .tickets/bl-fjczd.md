@@ -1,6 +1,6 @@
 ---
 id: bl-fjczd
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-13T13:23:00Z

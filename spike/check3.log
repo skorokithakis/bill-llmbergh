@@ -1,0 +1,20 @@
+cleanup first: Failed to stop spike-sleep.service: Unit spike-sleep.service not loaded.
+done
+
+3a. starting `sleep 653` and dropping the transport mid-command
+  in-flight exec settled as: rejected: exec failed: pi-env connection lost
+  after drop: none
+
+3b. `nohup sleep 654 &` (exec returns), then drop
+  launched as: pid 4533
+  after drop: 4533 sleep 654
+
+3c. `systemd-run --unit=spike-sleep sleep 655`, then drop
+  started as: Running as unit: spike-sleep.service; invocation ID: 558cdf00c8bf40199240b018fca21c64
+active
+  after drop: active
+   4662 /usr/bin/sleep 655
+
+cleanup: done
+inactive
+none

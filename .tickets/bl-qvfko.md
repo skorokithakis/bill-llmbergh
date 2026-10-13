@@ -27,3 +27,9 @@ ready for implementation
 
 The (max+1)th advisor call in a day is refused. With the cap set to a tiny value, the supervisor stops and the owner gets a Telegram notice; /resume works. A card read by a worker produces a notice naming the worker.
 
+
+## Notes
+
+**2026-10-13T13:44:44Z**
+
+Advisors authenticate with pi-ai OAuth (Claude Pro/Max login and Sign in with ChatGPT), not API keys. Owner runs 'npx @earendil-works/pi-ai login anthropic' and 'login openai' locally and copies auth.json to /data/auth.json. Use a file-backed CredentialStore on that path so token refreshes are written back. Anthropic bills this as extra usage at API rates; that is accepted. Model ids: TBD by owner.

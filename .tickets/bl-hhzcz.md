@@ -25,3 +25,9 @@ ready for implementation
 
 node starts the supervisor, connects to the VM, resumes, and a manual submit to root (temporary debug hook or a one-off script) runs bash on the VM. docker compose up --build works with a populated .env. harbormaster test starts the app.
 
+
+## Notes
+
+**2026-10-13T13:46:25Z**
+
+Spike passed; see spike/RESULTS.md and the updated 'Pi facts' in AGENTS.md. Changes vs the ticket text: (1) secret is OLLAMA_API_KEY, not DEEPSEEK_API_KEY; provider via createProvider with baseUrl https://ollama.com/v1, model deepseek-v4.1-flash, override baseUrl on the model object, copy DeepSeek pricing so cost is reported. (2) No ANTHROPIC_API_KEY / OPENAI_API_KEY: advisors use OAuth from /data/auth.json; the core ticket only needs to create the Models with a file-backed CredentialStore on /data/auth.json and register anthropicProvider() and openaiProvider(); the advisor ticket uses them. (3) Founder prompt: systemd advice with the corrected reason, and 'an interrupted tool call is not rerun; check state before retrying'. (4) Delete spike/ at the end of this ticket (keep nothing from it except code you copy into src/).

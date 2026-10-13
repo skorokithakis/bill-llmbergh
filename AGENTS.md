@@ -58,9 +58,12 @@ and starts per connection as `ssh <vm> pi-env serve`. It has no port and no secr
 runs file operations and commands and speaks a framed protocol on stdin and stdout.
 `RemoteExecutionEnv` is the Durable `ExecutionEnv` that talks to it.
 
-Caveat: when the SSH connection drops (supervisor restart, network error), pi-env kills
-every process group it started. Anything long-running on the VM must be a `systemd`
-service. Tell the founder this in its system prompt.
+Caveat (verified in the spike): when the SSH connection drops (supervisor restart, network error), pi-env
+kills commands that are still in flight. A process backgrounded with `&` whose spawning command already
+returned survives. Anything long-running on the VM should still be a `systemd` unit (`systemd-run` or a unit
+file) so it restarts on reboot and is visible with `systemctl`. Tell the founder this in its system prompt.
+An interrupted tool call comes back to the model as an error result and is not rerun; prompts must tell
+agents to check state before they retry.
 
 Why this split: the founder can change its own tools and run any command, but every change
 stays on the VM. It cannot change the harness code, its permissions, or the secrets.
@@ -71,7 +74,7 @@ stays on the VM. It cannot change the harness code, its permissions, or the secr
 
 - The root Durable conversation. Long-lived. Durable compacts it when it gets long.
 - Decides strategy, hires workers, spawns them, reads results, talks to the owner.
-- Model: DeepSeek (configurable; Ollama cloud as an optional second provider).
+- Model: DeepSeek served by Ollama Cloud (the owner's key is an Ollama Cloud key). Configurable.
 - Input arrives as Durable submissions with a `requestId`, so a restart never delivers the same event twice:
   - `owner_message` from Telegram.
   - `worker_finished` when a worker ends (result, failure, or stop).
@@ -92,6 +95,10 @@ stays on the VM. It cannot change the harness code, its permissions, or the secr
 ### Advisors (two, expensive)
 
 - One on Anthropic, one on OpenAI. Each has a fixed system prompt that frames it as a senior advisor.
+- Authentication: the owner's Claude and ChatGPT subscriptions through pi-ai OAuth. The owner logs in once locally
+  (`npx @earendil-works/pi-ai login anthropic` and `login openai`) and copies `auth.json` to `/data/auth.json`.
+  The supervisor uses a file-backed `CredentialStore` on that path so refreshed tokens persist. Anthropic bills
+  third-party OAuth use as "extra usage" at API rates (checked 2026-10-13); accepted.
 - Not a conversation. `ask_advisor` is a tool that makes one model call through `api.models`. One question, one answer. No tools, no memory.
 - Only the founder can ask them. The founder must give all necessary context in the question.
 - A configurable maximum number of calls per day, enforced in code.
@@ -172,13 +179,13 @@ cap, it does what `/stop` does and sends the owner a Telegram message. `/resume`
 
 One JSON config file plus environment variables for secrets. It includes:
 
-- Models: founder, default worker model, the two advisor models.
+- Models: founder and default worker (`deepseek-v4.1-flash` on Ollama Cloud), advisors `claude-opus-5-5` (Anthropic) and `gpt-6.1-sol` (OpenAI).
 - Heartbeat interval, maximum parallel workers, advisor calls per day, daily cost cap.
 - Work VM SSH host and user. The key and the `known_hosts` file are at fixed paths under `/data/ssh/`.
 - Telegram owner user ID.
 - Card details (from environment).
 
-Secrets from environment: `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, Telegram bot token, card details.
+Secrets from environment: `OLLAMA_API_KEY`, Telegram bot token, card details. Advisor OAuth credentials are in `/data/auth.json`.
 
 ## Stack
 
@@ -225,11 +232,16 @@ Harbormaster clones this repository and runs `docker compose up --build` on it. 
 - `hook(ToolTask, { beforeTool })` can block a call: use it for the advisor and worker caps.
 - `harness.usage(context)` returns tokens and cost per `provider/model`.
 - `watchEvents(harness, conversationId, context)` gives coding-agent style events, if we need live logs.
-- `pi-ai` has DeepSeek, Anthropic, and OpenAI built in. Ollama cloud is `createProvider()` with an OpenAI-compatible `baseUrl` and `compat.supportsDeveloperRole: false`.
+- `pi-ai` has DeepSeek, Anthropic, and OpenAI built in, but the owner's key is for Ollama Cloud (`https://ollama.com/v1`), so the founder's provider is `createProvider()` with that `baseUrl`, model id `deepseek-v4.1-flash`, `compat.supportsDeveloperRole: false`, and the DeepSeek pricing copied from the `deepseek-flash` catalog entry so cost is reported. Pitfall: a catalog model carries its own `baseUrl`, which overrides the provider's; set it on the model object too.
+- `env.exec()` returns `{ exitCode, spillPath? }`; output arrives through `options.onOutput`.
+- Inside a task, `runtime.entry()` sees only the task's own conversation; read another conversation's entries with `tx.entry()` inside a commit.
+- Durable's example 23 is slightly stale against the 1.2.0 types: tool results are `{ output }`, not `{ content }`.
+- `harness.resume()` is synchronous and takes no context.
+- The first VM operation pays for platform detection and daemon upload. Warm the connection at startup.
 - The coding-agent SDK (`createAgentSession`) was the rejected alternative. Its tools accept SSH `operations`, but we would have to write durable workers, the inbox, and cost totals ourselves.
 
 ## Project status
 
-- Phase: spec approved by the owner on 2026-10-13. Implementation runs through `tk` tickets (`tk ready`).
+- Phase: spec approved by the owner on 2026-10-13. Spike passed (see `spike/RESULTS.md` until the core ticket deletes it). Implementation runs through `tk` tickets (`tk ready`).
 - The owner has the VM, the domain, and the card, and sets up the Telegram bot token, user ID, and SSH key by hand.
 - The first ticket is a spike that proves (1) founder plus one background worker on DeepSeek with tools on the VM, (2) crash resume mid-worker, (3) `nohup` dies on disconnect and `systemd` survives, (4) the log and cost are readable from the SQLite file. If it fails, fall back to the SDK and re-plan.
