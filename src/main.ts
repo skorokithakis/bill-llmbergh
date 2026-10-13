@@ -1,11 +1,12 @@
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { Harness, createRegistry } from "@earendil-works/pi-durable";
+import { Harness, ROOT_CONVERSATION_ID, createRegistry } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { loadConfig, loadSecrets } from "./config.ts";
 import { startHeartbeat } from "./heartbeat.ts";
+import { CustomToolsDoc, customToolsSelector, installCustomTools } from "./custom_tools.ts";
 import { createPaymentCardExtension, startCostCap } from "./money.ts";
 import { FOUNDER_PROMPT } from "./prompt.ts";
 import { createCompanyModels } from "./providers.ts";
@@ -27,9 +28,9 @@ async function main(): Promise<void> {
 	const registry = createRegistry();
 	registry.install(CodingTools);
 	// The worker extension holds the shared worker prompt; the supervisor extension holds the founder's tools and the
-	// worker task definitions. Root conversations must not select the worker extension (it is removed below), and
-	// worker conversations select exactly CodingTools and the worker extension. The card extension is installed so the
-	// founder gets it; spawn_worker adds it to a worker whose role allows the card.
+	// worker task definitions. The root selects its extensions explicitly (see below); worker conversations select
+	// CodingTools and the worker extension, and spawn_worker adds the card extension if the role allows the card and
+	// the extension holding the custom tools for the role.
 	const paymentCard = createPaymentCardExtension(secrets.card);
 	const supervisor = createSupervisorExtension({
 		defaultWorkerModel: config.models.defaultWorker,
@@ -37,6 +38,7 @@ async function main(): Promise<void> {
 		advisorModels: { anthropic: config.models.advisorAnthropic, openai: config.models.advisorOpenAI },
 		advisorCallsPerDay: config.advisorCallsPerDay,
 		paymentCardExtension: paymentCard,
+		registry,
 	});
 	registry.install(paymentCard);
 	registry.install(WorkerExtension);
@@ -57,15 +59,19 @@ async function main(): Promise<void> {
 	});
 
 	const root = await harness.root(context);
+	// The stored custom tools are installed before resume() so a tool call resumed from the previous process finds its
+	// tool, and before the root is configured so the founder's first request offers them.
+	installCustomTools(registry, (await harness.snapshot(CustomToolsDoc, ROOT_CONVERSATION_ID, context)) ?? { tools: {} });
 	// Configured on every start, not just at creation, so a change to the prompt or model takes effect
 	// on the existing root conversation. Done before resume() so a run resumed from the previous
-	// process never makes a model call with the old prompt or model. The worker extension is removed so the
-	// founder never sees the worker rules; every other installed extension still reaches it.
+	// process never makes a model call with the old prompt or model. The founder selects its extensions explicitly
+	// instead of taking every installed one: the registry also holds the per-role custom tool extensions, which would
+	// show it each custom tool twice, and the worker extension, whose rules are not the founder's.
 	await root.configure(
 		{
 			model: config.models.founder,
 			instructions: FOUNDER_PROMPT,
-			extensions: { remove: [WorkerExtension] },
+			extensions: [CodingTools, supervisor, paymentCard, customToolsSelector()],
 		},
 		context,
 	);

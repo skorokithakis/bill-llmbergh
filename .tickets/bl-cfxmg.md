@@ -1,6 +1,6 @@
 ---
 id: bl-cfxmg
-status: open
+status: closed
 deps: [bl-dhwnc]
 links: []
 created: 2026-10-13T13:23:00Z

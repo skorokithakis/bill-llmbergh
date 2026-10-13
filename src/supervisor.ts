@@ -4,7 +4,9 @@ import {
 	defineTool,
 	type Extension,
 	type ModelRef,
+	type Registry,
 } from "@earendil-works/pi-durable";
+import { createCustomToolManagementTools, customToolsSelector } from "./custom_tools.ts";
 import { createMoneyTools, type AdvisorName } from "./money.ts";
 import { sendToOwner } from "./telegram.ts";
 import { createWorkerTools, WorkerAnchor, WorkerReporter } from "./workers.ts";
@@ -19,6 +21,8 @@ export type SupervisorOptions = {
 	readonly advisorModels: Record<AdvisorName, ModelRef>;
 	readonly advisorCallsPerDay: number;
 	readonly paymentCardExtension: Extension;
+	// The tools that define custom tools reinstall the custom-tools extensions after every change.
+	readonly registry: Registry;
 };
 
 const MessageOwnerTool = defineTool({
@@ -43,7 +47,8 @@ export function createSupervisorExtension(options: SupervisorOptions): Extension
 		tools: [
 			MessageOwnerTool,
 			...createMoneyTools({ advisorModels: options.advisorModels, advisorCallsPerDay: options.advisorCallsPerDay }),
-			...createWorkerTools(options),
+			...createWorkerTools({ ...options, customToolsSelector }),
+			...createCustomToolManagementTools({ registry: options.registry }),
 		],
 	});
 }

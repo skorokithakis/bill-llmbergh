@@ -168,6 +168,9 @@ export type WorkerToolOptions = {
 	// Passed in rather than imported so this module does not have to depend on the money module: spawn_worker
 	// adds it to a worker's extensions only when the role allows the card.
 	readonly paymentCardExtension: Extension;
+	// The name-only selector of the extension that holds the custom tools for one role (see custom_tools.ts). It is
+	// selected for every worker, even before any tool lists the role, so a tool defined later reaches running workers.
+	readonly customToolsSelector: (role: string) => Extension;
 };
 
 /** The founder-only role and worker tools; the supervisor extension owns them. */
@@ -287,10 +290,10 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 					await configure(tx, child.id, {
 						model: options.defaultWorkerModel,
 						// Exactly the coding tools and the worker rules; never the supervisor extension. The card tool
-						// is offered only to a role that may use it.
+						// is offered only to a role that may use it. Custom tools are offered only if they list this role.
 						extensions: role.tools.payment_card
-							? [CodingTools, WorkerExtension, options.paymentCardExtension]
-							: [CodingTools, WorkerExtension],
+							? [CodingTools, WorkerExtension, options.customToolsSelector(args.role), options.paymentCardExtension]
+							: [CodingTools, WorkerExtension, options.customToolsSelector(args.role)],
 						instructions: role.instructions,
 					});
 					workers.workers[workerId] = {
