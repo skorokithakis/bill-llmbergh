@@ -1,6 +1,6 @@
 ---
 id: bl-qvfko
-status: open
+status: closed
 deps: [bl-rkqlb, bl-dhwnc]
 links: []
 created: 2026-10-13T13:23:00Z

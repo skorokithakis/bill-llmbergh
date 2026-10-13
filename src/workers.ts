@@ -11,6 +11,7 @@ import {
 	section,
 	type ConversationId,
 	type EntryId,
+	type Extension,
 	type Harness,
 	type ModelRef,
 	type ToolExecutionApi,
@@ -164,6 +165,9 @@ export const WorkerExtension = defineExtension({
 export type WorkerToolOptions = {
 	readonly defaultWorkerModel: ModelRef;
 	readonly maxParallelWorkers: number;
+	// Passed in rather than imported so this module does not have to depend on the money module: spawn_worker
+	// adds it to a worker's extensions only when the role allows the card.
+	readonly paymentCardExtension: Extension;
 };
 
 /** The founder-only role and worker tools; the supervisor extension owns them. */
@@ -172,12 +176,15 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 		defineTool({
 			name: "hire_role",
 			description:
-				"Hire a role: a named set of instructions and a model. Workers are spawned from a role with spawn_worker. The only model value today is \"default\".",
+				"Hire a role: a named set of instructions and a model. Workers are spawned from a role with spawn_worker. The only model value today is \"default\". A role with payment_card true lets its workers read the company payment card.",
 			parameters: Type.Object({
 				name: Type.String({ description: "A short name for the role, such as developer or marketer." }),
 				instructions: Type.String({ description: "What a worker of this role is and how it should work." }),
 				model: Type.Optional(
 					Type.String({ description: 'The model workers of this role run on. The only value today is "default".' }),
+				),
+				payment_card: Type.Optional(
+					Type.Boolean({ description: "Whether workers of this role may call get_payment_card. Default false." }),
 				),
 			}),
 			execute: async (args, api, context) => {
@@ -189,7 +196,7 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 					roles.roles[args.name] = {
 						instructions: args.instructions,
 						model,
-						tools: { payment_card: false },
+						tools: { payment_card: args.payment_card ?? false },
 					};
 					return true;
 				}, context);
@@ -199,15 +206,18 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 		}),
 		defineTool({
 			name: "update_role",
-			description: "Change a role's instructions or model. Fields you leave out stay as they are.",
+			description: "Change a role's instructions, model, or card access. Fields you leave out stay as they are.",
 			parameters: Type.Object({
 				name: Type.String({ description: "The role to change." }),
 				instructions: Type.Optional(Type.String({ description: "The new instructions." })),
 				model: Type.Optional(Type.String({ description: 'The new model. The only value today is "default".' })),
+				payment_card: Type.Optional(
+					Type.Boolean({ description: "Whether workers of this role may call get_payment_card." }),
+				),
 			}),
 			execute: async (args, api, context) => {
-				if (args.instructions === undefined && args.model === undefined) {
-					return errorResult("Give at least one of instructions or model to update.");
+				if (args.instructions === undefined && args.model === undefined && args.payment_card === undefined) {
+					return errorResult("Give at least one of instructions, model, or payment_card to update.");
 				}
 				if (args.model !== undefined && args.model !== "default") {
 					return errorResult(`Unknown model "${args.model}"; the only value today is "default".`);
@@ -218,6 +228,7 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 					if (role === undefined) return false;
 					if (args.instructions !== undefined) role.instructions = args.instructions;
 					if (args.model !== undefined) role.model = args.model;
+					if (args.payment_card !== undefined) role.tools.payment_card = args.payment_card;
 					return true;
 				}, context);
 				if (!updated) return errorResult(`No role named "${args.name}".`);
@@ -275,8 +286,11 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 					const child = await tx.createConversation({ ownership: { kind: "task", taskId: anchor } });
 					await configure(tx, child.id, {
 						model: options.defaultWorkerModel,
-						// Exactly the coding tools and the worker rules; never the supervisor extension.
-						extensions: [CodingTools, WorkerExtension],
+						// Exactly the coding tools and the worker rules; never the supervisor extension. The card tool
+						// is offered only to a role that may use it.
+						extensions: role.tools.payment_card
+							? [CodingTools, WorkerExtension, options.paymentCardExtension]
+							: [CodingTools, WorkerExtension],
 						instructions: role.instructions,
 					});
 					workers.workers[workerId] = {

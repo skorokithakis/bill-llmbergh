@@ -1,5 +1,6 @@
 import type { Context } from "@earendil-works/chord";
 import { defineDoc, type Conversation, type Harness } from "@earendil-works/pi-durable";
+import { advisorCallsToday, costToday } from "./money.ts";
 import { runningWorkers } from "./workers.ts";
 
 const TELEGRAM_API = "https://api.telegram.org";
@@ -228,7 +229,7 @@ async function handleUpdate(
 		return;
 	}
 	if (command === "/status") {
-		await sendToOwner(await statusText(options.harness, options.context));
+		await sendToOwner(await statusText(options.harness, options.root, options.context));
 		return;
 	}
 	// The commands still work while stopped; a plain message does not, so that /stop really means stop.
@@ -246,18 +247,16 @@ async function handleUpdate(
 	);
 }
 
-async function statusText(harness: Harness, context: Context): Promise<string> {
+async function statusText(harness: Harness, root: Conversation, context: Context): Promise<string> {
 	// The workers ticket owns the registry, so /status reads it instead of counting task-owned conversations.
 	const workers = await runningWorkers(harness, context);
 
-	const usage = await harness.usage(context);
-	let cost = 0;
-	for (const bucket of Object.values(usage.models)) cost += bucket.cost.total;
-	for (const bucket of Object.values(usage.tools)) cost += bucket.cost.total;
+	// The caps ticket owns the counters: today's spend is the session total minus where the day started.
+	const cost = await costToday(harness, root, context);
+	const advisorCalls = await advisorCallsToday(harness, root, context);
 
-	// Advisor calls are counted by the caps ticket, which owns the counters document; until then it is 0.
 	const workerLines = workers.map((worker) => `${worker.id} ${worker.role}`);
-	return `Workers running: ${workerLines.length === 0 ? "none" : `\n${workerLines.join("\n")}`}\nCost so far: $${cost.toFixed(4)}\nAdvisor calls today: 0`;
+	return `Workers running: ${workerLines.length === 0 ? "none" : `\n${workerLines.join("\n")}`}\nCost today: $${cost.toFixed(4)}\nAdvisor calls today: ${advisorCalls}`;
 }
 
 async function getUpdates(

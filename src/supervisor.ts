@@ -5,15 +5,20 @@ import {
 	type Extension,
 	type ModelRef,
 } from "@earendil-works/pi-durable";
+import { createMoneyTools, type AdvisorName } from "./money.ts";
 import { sendToOwner } from "./telegram.ts";
 import { createWorkerTools, WorkerAnchor, WorkerReporter } from "./workers.ts";
 
-// The founder's supervisor tools. Later tickets add the advisors, the caps, and the custom tools here. The extension
-// is assembled here so main.ts installs one object, and the worker task definitions ride along: they are resolved by
-// name from the registry, whichever conversations select the extension.
+// The founder's supervisor tools. It is assembled here so main.ts installs one object, and the worker task
+// definitions ride along: they are resolved by name from the registry, whichever conversations select the
+// extension. The advisors and the daily caps live in money.ts; the payment card is its own extension because
+// worker conversations select it per role.
 export type SupervisorOptions = {
 	readonly defaultWorkerModel: ModelRef;
 	readonly maxParallelWorkers: number;
+	readonly advisorModels: Record<AdvisorName, ModelRef>;
+	readonly advisorCallsPerDay: number;
+	readonly paymentCardExtension: Extension;
 };
 
 const MessageOwnerTool = defineTool({
@@ -35,6 +40,10 @@ export function createSupervisorExtension(options: SupervisorOptions): Extension
 	return defineExtension({
 		name: "supervisor",
 		tasks: [WorkerAnchor, WorkerReporter],
-		tools: [MessageOwnerTool, ...createWorkerTools(options)],
+		tools: [
+			MessageOwnerTool,
+			...createMoneyTools({ advisorModels: options.advisorModels, advisorCallsPerDay: options.advisorCallsPerDay }),
+			...createWorkerTools(options),
+		],
 	});
 }

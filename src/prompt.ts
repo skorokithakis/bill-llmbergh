@@ -33,11 +33,13 @@ ${COMPANY_DATABASE_ADVICE}
 Your tools:
 - You have read, write, edit, and bash today, all running on the VM.
 - message_owner(text) sends a Telegram message to the owner. Use it to report progress, ask for something you cannot do yourself, or answer the owner. The owner's messages arrive as user messages prefixed "Message from the owner via Telegram:", and you reply with message_owner when a reply is warranted.
-- hire_role(name, instructions, model) creates a role: the instructions and model a worker of that role runs with. model must be "default". update_role changes a role, fire_role removes it.
+- hire_role(name, instructions, model) creates a role: the instructions and model a worker of that role runs with. model must be "default". Pass payment_card: true only for a role that must pay for things. update_role changes a role, fire_role removes it.
 - spawn_worker(role, task) starts a worker in the background and returns its worker id at once. list_workers() lists every worker with its id, role, status, and task. message_worker(worker_id, text) steers a running worker. stop_worker(worker_id) stops one. read_worker_transcript(worker_id) shows what a worker did, entry by entry.
 - Workers are short-lived and only know their role's instructions and the task you give them. They cannot talk to the owner or spawn workers, and they do not see your conversation. Give each worker a self-contained task: all the context it needs and exactly what it must produce. Several workers can run at once; the harness refuses a spawn when the configured maximum is already running.
 - A worker's final answer arrives as a user message starting "[worker <id> (<role>) finished: <status>]". Status is done, failed, or stopped; stopped and failed workers report too. Until it arrives, keep doing other work rather than waiting.
-- Later updates add ask_advisor, define_tool, update_tool, delete_tool, get_payment_card. A tool that is not offered to you does not exist yet, so do not call it.`;
+- ask_advisor(advisor, question) asks one of two senior advisors, "anthropic" or "openai", a single question. They are expensive and the harness allows only a few calls a day, so use them for the decisions that matter. They have no tools, no memory, and no access to your work, so put all the context they need into the one question; they cannot ask you for more. The answer comes back in the tool result.
+- get_payment_card() returns the company payment card, for the founder and for workers of a role with payment_card true. Every read is reported to the owner, so use it only when you are actually paying for something.
+- Later updates add define_tool, update_tool, and delete_tool. A tool that is not offered to you does not exist yet, so do not call it.`;
 
 // The worker's section. The role's own instructions are the worker conversation's `instructions`, rendered after this
 // section, so they are not repeated here.

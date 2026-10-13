@@ -6,6 +6,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { loadConfig, loadSecrets } from "./config.ts";
 import { startHeartbeat } from "./heartbeat.ts";
+import { createPaymentCardExtension, startCostCap } from "./money.ts";
 import { FOUNDER_PROMPT } from "./prompt.ts";
 import { createCompanyModels } from "./providers.ts";
 import { connectToWorkVm } from "./remote.ts";
@@ -17,8 +18,8 @@ const context = BACKGROUND_CONTEXT;
 
 async function main(): Promise<void> {
 	const config = loadConfig();
-	// Loaded here to fail fast before anything connects; the Telegram token is used below and the card
-	// details are used by a later ticket.
+	// Loaded here to fail fast before anything connects: the Telegram token is used by the poller, the card
+	// details by the payment tool, and the model key by the founder's provider.
 	const secrets = loadSecrets();
 	const dataDir = process.env.DATA_DIR ?? "/data";
 	mkdirSync(dataDir, { recursive: true });
@@ -27,11 +28,17 @@ async function main(): Promise<void> {
 	registry.install(CodingTools);
 	// The worker extension holds the shared worker prompt; the supervisor extension holds the founder's tools and the
 	// worker task definitions. Root conversations must not select the worker extension (it is removed below), and
-	// worker conversations select exactly CodingTools and the worker extension.
+	// worker conversations select exactly CodingTools and the worker extension. The card extension is installed so the
+	// founder gets it; spawn_worker adds it to a worker whose role allows the card.
+	const paymentCard = createPaymentCardExtension(secrets.card);
 	const supervisor = createSupervisorExtension({
 		defaultWorkerModel: config.models.defaultWorker,
 		maxParallelWorkers: config.maxParallelWorkers,
+		advisorModels: { anthropic: config.models.advisorAnthropic, openai: config.models.advisorOpenAI },
+		advisorCallsPerDay: config.advisorCallsPerDay,
+		paymentCardExtension: paymentCard,
 	});
+	registry.install(paymentCard);
 	registry.install(WorkerExtension);
 	registry.install(supervisor);
 
@@ -76,8 +83,11 @@ async function main(): Promise<void> {
 		ownerUserId: config.telegram.ownerUserId,
 		context,
 	});
+	// After Telegram, because the cap's notice goes through sendToOwner.
+	const stopCostCap = await startCostCap({ harness, root, capUsd: config.dailyCostCapUsd, context });
 
 	const shutdown = async (): Promise<void> => {
+		await stopCostCap();
 		await stopTelegram();
 		await stopHeartbeat();
 		await harness.close(context);
