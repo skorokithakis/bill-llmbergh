@@ -1,6 +1,6 @@
 # Bill LLMbergh
 
-![Bill](bill.jpg)
+![Bill](misc/bill.jpg)
 
 Yeah. Hi. We're going to need you to go ahead and give a language model a server, a
 domain, a Telegram bot, and a credit card with a hundred dollars on it. That'd be great.
