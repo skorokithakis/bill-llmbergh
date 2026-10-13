@@ -1,6 +1,6 @@
 ---
 id: bl-rkqlb
-status: open
+status: closed
 deps: [bl-hhzcz]
 links: []
 created: 2026-10-13T13:23:00Z

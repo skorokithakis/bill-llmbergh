@@ -1,5 +1,6 @@
 import type { Context } from "@earendil-works/chord";
 import { LiveDoc, type Conversation, type Harness } from "@earendil-works/pi-durable";
+import { isStopped } from "./telegram.ts";
 
 const TICK_MS = 60_000;
 
@@ -27,6 +28,8 @@ export async function startHeartbeat(
 	});
 
 	const tick = async (): Promise<void> => {
+		// /stop means stop: while the durable flag is set, no heartbeat is submitted.
+		if (await isStopped(harness, root, context)) return;
 		const live = await harness.snapshot(LiveDoc, root.id, context);
 		if (live?.run !== undefined) {
 			lastActivityMs = Date.now();

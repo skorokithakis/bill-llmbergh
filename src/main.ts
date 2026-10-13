@@ -10,12 +10,14 @@ import { FOUNDER_PROMPT } from "./prompt.ts";
 import { createCompanyModels } from "./providers.ts";
 import { connectToWorkVm } from "./remote.ts";
 import { SupervisorExtension } from "./supervisor.ts";
+import { isStopped, startTelegram } from "./telegram.ts";
 
 const context = BACKGROUND_CONTEXT;
 
 async function main(): Promise<void> {
 	const config = loadConfig();
-	// Loaded here only to fail fast; the card and Telegram secrets are used by later tickets.
+	// Loaded here to fail fast before anything connects; the Telegram token is used below and the card
+	// details are used by a later ticket.
 	const secrets = loadSecrets();
 	const dataDir = process.env.DATA_DIR ?? "/data";
 	mkdirSync(dataDir, { recursive: true });
@@ -45,9 +47,21 @@ async function main(): Promise<void> {
 	await root.configure({ model: config.models.founder, instructions: FOUNDER_PROMPT }, context);
 	harness.resume();
 
+	// A restart while /stop was in effect must not resume pending work, so abort again here. The heartbeat
+	// and the Telegram poller also obey the durable flag.
+	if (await isStopped(harness, root, context)) await root.abort(context, { background: true });
+
 	const stopHeartbeat = await startHeartbeat(harness, root, config.heartbeatIntervalMinutes * 60_000, context);
+	const stopTelegram = await startTelegram({
+		harness,
+		root,
+		botToken: secrets.telegramBotToken,
+		ownerUserId: config.telegram.ownerUserId,
+		context,
+	});
 
 	const shutdown = async (): Promise<void> => {
+		await stopTelegram();
 		await stopHeartbeat();
 		await harness.close(context);
 		await workVm.close();
