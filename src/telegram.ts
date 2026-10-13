@@ -239,15 +239,20 @@ async function handleUpdate(
 	}
 	// `steer` cuts into the current run at the next tool boundary, so the owner is heard during a long run
 	// instead of waiting behind it as a follow-up. The requestId makes a replay of the same update idempotent.
+	const requestId = `tg:${update.update_id}`;
 	const submission = await options.root.submit(
 		{
 			type: "input",
 			content: `Message from the owner via Telegram:\n\n${text}`,
-			requestId: `tg:${update.update_id}`,
+			requestId,
 			whenBusy: "steer",
 		},
 		options.context,
 	);
+	// The supervisor logs nothing else while the founder works, so this line and the settlement line below are
+	// what tell the operator whether an owner message reached the founder (queued or placed) and how it ended.
+	const admitted = await submission.status(options.context);
+	console.log(`owner message ${requestId}: submission ${submission.id} ${admitted.status}`);
 
 	// Wait for the answer in the background: the founder may run for minutes, and the poll loop must keep
 	// reading updates. A failed run never reaches onReport, so this wait is the only place the owner hears
@@ -255,11 +260,15 @@ async function handleUpdate(
 	void submission
 		.wait(options.context)
 		.then(async (settled) => {
-			if (settled.status !== "unanswered") return;
+			if (settled.status !== "unanswered") {
+				console.log(`owner message ${requestId}: ${settled.status}`);
+				return;
+			}
 			const detail =
 				settled.detail === undefined
 					? ""
 					: ` ${typeof settled.detail === "string" ? settled.detail : JSON.stringify(settled.detail)}`;
+			console.log(`owner message ${requestId}: unanswered ${settled.reason}${detail}`);
 			await sendToOwner(`The founder did not answer your message: ${settled.reason}${detail}`);
 		})
 		.catch((error) => console.error("telegram: waiting for the founder's answer failed:", error));
