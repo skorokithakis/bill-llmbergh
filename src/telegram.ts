@@ -237,14 +237,32 @@ async function handleUpdate(
 		await sendToOwner("Stopped; send /resume to start again.");
 		return;
 	}
-	await options.root.submit(
+	// `steer` cuts into the current run at the next tool boundary, so the owner is heard during a long run
+	// instead of waiting behind it as a follow-up. The requestId makes a replay of the same update idempotent.
+	const submission = await options.root.submit(
 		{
 			type: "input",
 			content: `Message from the owner via Telegram:\n\n${text}`,
 			requestId: `tg:${update.update_id}`,
+			whenBusy: "steer",
 		},
 		options.context,
 	);
+
+	// Wait for the answer in the background: the founder may run for minutes, and the poll loop must keep
+	// reading updates. A failed run never reaches onReport, so this wait is the only place the owner hears
+	// that their message went unanswered. The wait is lost on restart, which is accepted.
+	void submission
+		.wait(options.context)
+		.then(async (settled) => {
+			if (settled.status !== "unanswered") return;
+			const detail =
+				settled.detail === undefined
+					? ""
+					: ` ${typeof settled.detail === "string" ? settled.detail : JSON.stringify(settled.detail)}`;
+			await sendToOwner(`The founder did not answer your message: ${settled.reason}${detail}`);
+		})
+		.catch((error) => console.error("telegram: waiting for the founder's answer failed:", error));
 }
 
 async function statusText(harness: Harness, root: Conversation, context: Context): Promise<string> {
