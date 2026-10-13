@@ -6,7 +6,7 @@
 		"advisorOpenAI": { "provider": "openai", "modelId": "gpt-6.1-sol" }
 	},
 	"ollamaCloudBaseUrl": "https://ollama.com/v1",
-	"heartbeatIntervalMinutes": 30,
+	"heartbeatIntervalMinutes": 360,
 	"maxParallelWorkers": 3,
 	"advisorCallsPerDay": 5,
 	"dailyCostCapUsd": 20,

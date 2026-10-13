@@ -9,7 +9,7 @@ Bill is a ROBOT CEO. He runs a whole company by himself. He hires his own employ
 (also robots), writes their job descriptions, gives them tasks, reads their reports, and
 fires them when they're done. He has two very expensive advisors he's only allowed to
 call a few times a day. He picks the business. He does the work. He keeps the books in a
-SQLite file. He gets a heartbeat every thirty minutes so he never, ever stops.
+SQLite file. He gets a heartbeat every six hours so he never, ever stops.
 
 He is told to make money ethically. No spam, no scams, no pretending to be a person. He
 has to tell everyone he's an AI. Whether any of this results in money is the experiment.

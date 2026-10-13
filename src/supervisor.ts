@@ -9,6 +9,7 @@ import {
 import { createCustomToolManagementTools, customToolsSelector } from "./custom_tools.ts";
 import { createMoneyTools, type AdvisorName } from "./money.ts";
 import { sendToOwner } from "./telegram.ts";
+import { createWakeupTools } from "./wakeups.ts";
 import { createWorkerTools, WorkerAnchor, WorkerReporter } from "./workers.ts";
 
 // The founder's supervisor tools. It is assembled here so main.ts installs one object, and the worker task
@@ -49,6 +50,7 @@ export function createSupervisorExtension(options: SupervisorOptions): Extension
 			...createMoneyTools({ advisorModels: options.advisorModels, advisorCallsPerDay: options.advisorCallsPerDay }),
 			...createWorkerTools({ ...options, customToolsSelector }),
 			...createCustomToolManagementTools({ registry: options.registry }),
+			...createWakeupTools(),
 		],
 	});
 }

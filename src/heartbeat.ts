@@ -1,6 +1,7 @@
 import type { Context } from "@earendil-works/chord";
 import { LiveDoc, type Conversation, type Harness } from "@earendil-works/pi-durable";
 import { isStopped } from "./telegram.ts";
+import { fireDueWakeups } from "./wakeups.ts";
 
 const TICK_MS = 60_000;
 
@@ -28,8 +29,10 @@ export async function startHeartbeat(
 	});
 
 	const tick = async (): Promise<void> => {
-		// /stop means stop: while the durable flag is set, no heartbeat is submitted.
+		// /stop means stop: while the durable flag is set, no heartbeat is submitted and no wake-up fires. A
+		// wake-up that came due while stopped is still in the document, so it fires on the first tick after /resume.
 		if (await isStopped(harness, root, context)) return;
+		await fireDueWakeups(harness, root, context);
 		const live = await harness.snapshot(LiveDoc, root.id, context);
 		if (live?.run !== undefined) {
 			lastActivityMs = Date.now();
