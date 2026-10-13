@@ -368,7 +368,7 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 		defineTool({
 			name: "read_worker_transcript",
 			description:
-				"Show a worker's conversation as lines of role: text, oldest first, truncated. Use it to see what a worker actually did.",
+				"Show the most recent part of a worker's conversation as lines of role: text, oldest first within that part. Earlier history is cut off, so a long worker's start is not shown. Use it to see what a worker actually did and how it ended.",
 			parameters: Type.Object({
 				worker_id: Type.String({ description: "The worker id from spawn_worker or list_workers." }),
 			}),
@@ -380,19 +380,22 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 				const page = await api.commit(
 					(tx) =>
 						tx.scanEntries(
-							{ conversationId: worker.conversationId, order: "ascending" },
+							{ conversationId: worker.conversationId, order: "descending" },
 							MAX_TRANSCRIPT_ENTRIES,
 							undefined,
 						),
 					context,
 				);
+				// The newest entries come first from the scan, and the worker's final answer is the thing the founder
+				// most needs, which the oldest entries of a long worker would push out of reach. They are put back
+				// in chronological order for reading.
 				const lines: string[] = [];
-				for (const entry of page.items) {
+				for (const entry of [...page.items].reverse()) {
 					for (const message of entry.model ?? []) lines.push(`${message.role}: ${contentToText(message.content)}`);
 				}
 				if (lines.length === 0) return textResult(`Worker ${args.worker_id} has no transcript yet.`);
-				const suffix = page.next === undefined ? "" : `\n... [only the first ${MAX_TRANSCRIPT_ENTRIES} entries are shown]`;
-				return textResult(`${clip(lines.join("\n"), MAX_TRANSCRIPT_CHARS)}${suffix}`);
+				const prefix = page.next === undefined ? "" : `[only the last ${MAX_TRANSCRIPT_ENTRIES} entries are shown]\n...\n`;
+				return textResult(`${prefix}${clipStart(lines.join("\n"), MAX_TRANSCRIPT_CHARS)}`);
 			},
 		}),
 	];
@@ -460,6 +463,11 @@ const MAX_TRANSCRIPT_CHARS = 8000;
 
 function clip(text: string, limit: number): string {
 	return text.length <= limit ? text : `${text.slice(0, limit)}\n... [truncated]`;
+}
+
+// Keeps the end of the text, for the transcript, where the newest lines matter most.
+function clipStart(text: string, limit: number): string {
+	return text.length <= limit ? text : `[truncated] ...\n${text.slice(text.length - limit)}`;
 }
 
 function textResult(text: string): { output: Array<{ type: "text"; text: string }> } {

@@ -17,6 +17,7 @@ import {
 	type UsageState,
 } from "@earendil-works/pi-durable";
 import type { Secrets } from "./config.ts";
+import { HARD_RULES } from "./prompt.ts";
 import { isStopped, sendToOwner, stopSupervisor } from "./telegram.ts";
 import { WorkersDoc } from "./workers.ts";
 
@@ -52,7 +53,9 @@ export type MoneyOptions = {
 
 // The advisors are asked once each time, with no history and no tools, so the prompt has to carry everything:
 // who it is advising, that the answer is used once, and that brevity is part of the job.
-const ADVISOR_SYSTEM_PROMPT = `You are a senior advisor to the founder of a small company. The founder is an AI agent whose single goal is to make the company money ethically: no stealing, cheating, spamming, deception, or impersonation, and it obeys the law and the terms of service of every platform it uses.
+const ADVISOR_SYSTEM_PROMPT = `You are a senior advisor to the founder of a small company. The founder is an AI agent whose single goal is to make the company money ethically. Do not advise anything that breaks the rules the founder works under:
+
+${HARD_RULES}
 
 You receive one question and answer it once. You have no tools, no memory of earlier advice, and no access to the founder's conversations or data, so work only from what the question tells you. Be strategic and concrete: give a clear recommendation with the reasoning that matters, name the main risks, and leave out filler. Be brief, a few short paragraphs at most.`;
 
@@ -89,6 +92,10 @@ function createAskAdvisorTool(options: MoneyOptions): ToolRegistration {
 			const answer = await api.models.completeSimple(model, {
 				systemPrompt: ADVISOR_SYSTEM_PROMPT,
 				messages: [{ role: "user", content: args.question, timestamp: Date.now() }],
+			}, {
+				// Without this, /stop, the cost cap, and shutdown would abort the tool call but leave the
+				// expensive advisor request running to completion.
+				signal: context.abortSignal,
 			});
 			const text = assistantText(answer);
 			// The usage rides on the result so it reaches pi.usage and the daily cost cap, exactly as a model
@@ -214,6 +221,10 @@ export type CostCapOptions = {
  */
 export async function startCostCap(options: CostCapOptions): Promise<() => Promise<void>> {
 	let inFlight: Promise<void> | undefined;
+	// The baseline is captured now, before the caller resumes any work. Left to the first tick, the spend of the
+	// first minute (or of runs resumed from the previous process) would be absorbed into the baseline and never
+	// counted against the cap.
+	await rollCounters(options.harness, options.root, options.context);
 	const check = async (): Promise<void> => {
 		if (await isStopped(options.harness, options.root, options.context)) return;
 		const counters = await rollCounters(options.harness, options.root, options.context);

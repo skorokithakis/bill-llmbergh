@@ -12,7 +12,7 @@ import { FOUNDER_PROMPT } from "./prompt.ts";
 import { createCompanyModels } from "./providers.ts";
 import { connectToWorkVm } from "./remote.ts";
 import { createSupervisorExtension } from "./supervisor.ts";
-import { isStopped, startTelegram } from "./telegram.ts";
+import { isStopped, startTelegram, stopSupervisor } from "./telegram.ts";
 import { WorkerExtension } from "./workers.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -75,13 +75,9 @@ async function main(): Promise<void> {
 		},
 		context,
 	);
-	harness.resume();
 
-	// A restart while /stop was in effect must not resume pending work, so abort again here. The heartbeat
-	// and the Telegram poller also obey the durable flag.
-	if (await isStopped(harness, root, context)) await root.abort(context, { background: true });
-
-	const stopHeartbeat = await startHeartbeat(harness, root, config.heartbeatIntervalMinutes * 60_000, context);
+	// Telegram and the cost cap start before resume() so that work resumed from the previous process is already
+	// under the cap, has a spend baseline that excludes it, and can reach the owner through sendToOwner.
 	const stopTelegram = await startTelegram({
 		harness,
 		root,
@@ -91,6 +87,13 @@ async function main(): Promise<void> {
 	});
 	// After Telegram, because the cap's notice goes through sendToOwner.
 	const stopCostCap = await startCostCap({ harness, root, capUsd: config.dailyCostCapUsd, context });
+
+	// A restart while /stop was in effect must not resume pending work, so abort again here, the same way /stop
+	// does, before resume(). The heartbeat and the Telegram poller also obey the durable flag.
+	if (await isStopped(harness, root, context)) await stopSupervisor(root, context);
+	harness.resume();
+
+	const stopHeartbeat = await startHeartbeat(harness, root, config.heartbeatIntervalMinutes * 60_000, context);
 
 	const shutdown = async (): Promise<void> => {
 		await stopCostCap();

@@ -57,8 +57,9 @@ export function loadConfig(path: string = resolve(process.env.DATA_DIR ?? "/data
 	requirePositiveNumber("maxParallelWorkers", config.maxParallelWorkers);
 	requirePositiveNumber("advisorCallsPerDay", config.advisorCallsPerDay);
 	requirePositiveNumber("dailyCostCapUsd", config.dailyCostCapUsd);
-	if (!Number.isInteger(config.telegram.ownerUserId)) {
-		throw new Error("config.json: telegram.ownerUserId must be an integer");
+	// The example ships with 0, and an owner id of 0 would make the bot accept no one, so a placeholder fails here.
+	if (!Number.isSafeInteger(config.telegram.ownerUserId) || config.telegram.ownerUserId <= 0) {
+		throw new Error("config.json: telegram.ownerUserId must be a positive integer; fill in the owner's Telegram user id");
 	}
 	return config;
 }
