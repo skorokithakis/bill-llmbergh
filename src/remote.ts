@@ -19,6 +19,12 @@ export async function connectToWorkVm(config: Config, dataDir: string): Promise<
 		knownHostsFile: resolve(dataDir, "ssh/known_hosts"),
 		hostKeyAlias: "pi-env-bill",
 	};
+	// pi-env reports a missing or unreadable key only as a bare spawn_error after the host key scan has
+	// already succeeded, which sent the owner looking at the network. Check the one thing they place by
+	// hand before touching SSH at all.
+	if (!existsSync(target.identityFile)) {
+		throw new Error(`SSH private key ${target.identityFile} is missing; copy the work VM key there (mode 600)`);
+	}
 	// The owner copies the key by hand, so the first run has no known key. Trust it once, print the
 	// fingerprint so the owner can check it against the VM, and keep it in the data directory after.
 	if (!isTrusted(target)) {
