@@ -1,0 +1,16 @@
+services:
+  supervisor:
+    build: .
+    restart: unless-stopped
+    environment:
+      - OLLAMA_API_KEY
+      - TELEGRAM_BOT_TOKEN
+      - CARD_NUMBER
+      - CARD_EXPIRY
+      - CARD_CVC
+      - CARD_NAME
+    volumes:
+      - data:/data
+
+volumes:
+  data:

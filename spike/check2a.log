@@ -1,8 +1,0 @@
-(node:79643) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-(node:79643) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-VM warm-up: warm
-x86_64
-root prompt: Spawn a worker named bob. Tell it to run this exact bash command on the VM exactly once: `echo start > /tmp/spike2; sleep 40; echo done >> /tmp/spike2`. It must report the command output. It must not retry if the command is interrupted.
-worker conversation 15; bash is running
-READY_TO_KILL

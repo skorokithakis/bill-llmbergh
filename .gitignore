@@ -1,3 +1,5 @@
 .secrets/
 node_modules/
 .env
+.data/
+config.json

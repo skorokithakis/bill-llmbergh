@@ -177,7 +177,9 @@ cap, it does what `/stop` does and sends the owner a Telegram message. `/resume`
 
 ## Configuration
 
-One JSON config file plus environment variables for secrets. It includes:
+One JSON config file plus environment variables for secrets. The non-secret config is `/data/config.json`,
+copied from `config.example.json` in the repository; it is not committed, so it lives in the data volume
+like the SSH key. It includes:
 
 - Models: founder and default worker (`deepseek-v4.1-flash` on Ollama Cloud), advisors `claude-opus-5-5` (Anthropic) and `gpt-6.1-sol` (OpenAI).
 - Heartbeat interval, maximum parallel workers, advisor calls per day, daily cost cap.
@@ -202,11 +204,13 @@ Harbormaster clones this repository and runs `docker compose up --build` on it. 
 - Plain named volumes only. Harbormaster backs a volume named `data` with a host directory it keeps forever.
   A volume whose name starts with `cache-` is backed by a directory it may delete. We have no cache-only data,
   so one volume: `data:/data`. The SQLite storage, the pi-env `known_hosts` file, and the SSH private key live there.
-- The owner copies the SSH private key to `data/<app>/data/ssh/id_ed25519` by hand before the first run. A multi-line
-  key does not fit Harbormaster's `key=value` environment file.
+- The owner copies two files into the data volume by hand before the first run: the SSH private key to
+  `data/<app>/data/ssh/id_ed25519` (a multi-line key does not fit Harbormaster's `key=value` environment file) and
+  the non-secret config to `data/<app>/data/config.json`, copied from `config.example.json`.
 - Secrets are environment variables, listed by name only in the Compose file (`- DEEPSEEK_API_KEY`), so that
   Harbormaster's `environment_file` supplies them.
-- The non-secret config (`config.json`) is committed to the repository.
+- The non-secret config is `/data/config.json`, copied from `config.example.json`. It is not committed, so the owner
+  places it in the data volume by hand.
 - `harbormaster test` in the repository root must start the app.
 
 ## Non-goals (do not build these)
@@ -242,6 +246,6 @@ Harbormaster clones this repository and runs `docker compose up --build` on it. 
 
 ## Project status
 
-- Phase: spec approved by the owner on 2026-10-13. Spike passed (see `spike/RESULTS.md` until the core ticket deletes it). Implementation runs through `tk` tickets (`tk ready`).
+- Phase: spec approved by the owner on 2026-10-13. Spike passed. Implementation runs through `tk` tickets (`tk ready`).
 - The owner has the VM, the domain, and the card, and sets up the Telegram bot token, user ID, and SSH key by hand.
 - The first ticket is a spike that proves (1) founder plus one background worker on DeepSeek with tools on the VM, (2) crash resume mid-worker, (3) `nohup` dies on disconnect and `systemd` survives, (4) the log and cost are readable from the SQLite file. If it fails, fall back to the SDK and re-plan.

@@ -1,0 +1,22 @@
+{
+	"name": "bill-llmbergh",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=22.19"
+	},
+	"scripts": {
+		"start": "node --experimental-strip-types src/main.ts",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@earendil-works/chord": "1.2.0",
+		"@earendil-works/pi-ai": "1.2.0",
+		"@earendil-works/pi-durable": "1.2.0",
+		"@earendil-works/pi-env": "1.2.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.0",
+		"typescript": "^5.9.0"
+	}
+}
