@@ -120,6 +120,8 @@ Founder only:
 - `read_worker_transcript(worker_id)`.
 - `ask_advisor(advisor, question)`.
 - `message_owner(text)`: sends a Telegram message to the owner.
+- `send_file(path, caption?)`: sends one file from the work VM to the owner as a Telegram document. Telegram refuses
+  documents over 50 MB, so a larger file must be compressed, split, or served from the VM and linked with `message_owner`.
 - `define_tool(...)`, `update_tool(...)`, `delete_tool(name)`.
 
 Founder and workers (can be turned on per role):

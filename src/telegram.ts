@@ -6,6 +6,10 @@ import { runningWorkers } from "./workers.ts";
 const TELEGRAM_API = "https://api.telegram.org";
 // Telegram rejects any message longer than this, so long outputs are split into several messages.
 const MAX_MESSAGE_LENGTH = 4096;
+/** Telegram's bot API refuses a document larger than this, so the file tools check before uploading. */
+export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
+/** Telegram refuses a longer caption; it is not split like a message, so the caller is asked for a shorter one. */
+export const MAX_CAPTION_LENGTH = 1024;
 // getUpdates holds the connection open for this many seconds when there is nothing to deliver.
 const LONG_POLL_SECONDS = 30;
 // A transport error must not kill the long-lived poller, so a failed request is retried after this pause.
@@ -13,6 +17,8 @@ const RETRY_DELAY_MS = 3000;
 // A request gets the long poll's own time plus this, so a stalled connection fails instead of hanging.
 const REQUEST_MARGIN_MS = 10_000;
 const SEND_TIMEOUT_MS = 15_000;
+// An upload is slower than a message: a large document over a modest link needs minutes, not seconds.
+const UPLOAD_TIMEOUT_MS = 300_000;
 
 /** A Telegram update, reduced to the one field the supervisor reads. */
 export type TelegramUpdate = {
@@ -139,6 +145,34 @@ export async function startTelegram(options: TelegramOptions): Promise<() => Pro
 export async function sendToOwner(text: string): Promise<void> {
 	if (client === undefined) throw new Error("sendToOwner was called before startTelegram configured the bot");
 	for (const part of splitForTelegram(text)) await sendMessage(client, part);
+}
+
+export type OutgoingFile = {
+	/** Shown to the owner as the file's name; derived from the path on the VM by the caller. */
+	readonly filename: string;
+	readonly bytes: Uint8Array;
+	readonly caption?: string;
+};
+
+/**
+ * Send a file to the owner's private chat as a Telegram document. The bytes go straight from this process to
+ * Telegram, so the bot token stays in the container and the work VM holds no credential. `signal` is the tool
+ * call's cancellation, so /stop and shutdown stop the upload instead of finishing it.
+ */
+export async function sendFileToOwner(file: OutgoingFile, signal?: AbortSignal): Promise<void> {
+	if (client === undefined) throw new Error("sendFileToOwner was called before startTelegram configured the bot");
+	const form = new FormData();
+	form.set("chat_id", String(client.ownerUserId));
+	if (file.caption !== undefined) form.set("caption", file.caption);
+	form.set("document", new Blob([file.bytes]), file.filename);
+	try {
+		await callTelegramMultipart(client, "sendDocument", form, signal);
+	} catch (error) {
+		// The request URL carries the bot token and a network error's text may echo it, so the message is
+		// scrubbed here, before it can become a tool result or a log line.
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(message.split(client.botToken).join("<bot token>"));
+	}
 }
 
 /** Whether /stop has been issued and /resume has not yet cleared it. */
@@ -311,12 +345,35 @@ async function callTelegram<T>(
 	timeoutMs: number,
 	signal?: AbortSignal,
 ): Promise<T> {
-	const timeout = AbortSignal.timeout(timeoutMs);
-	const response = await telegram.fetch(`${TELEGRAM_API}/bot${telegram.botToken}/${method}`, {
-		method: "POST",
+	return await telegramRequest<T>(telegram, method, {
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(body),
-		signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
+		timeoutMs,
+		signal,
+	});
+}
+
+/** A multipart upload. The content type is left to fetch, which has to add the multipart boundary. */
+async function callTelegramMultipart<T>(
+	telegram: TelegramClient,
+	method: string,
+	form: FormData,
+	signal?: AbortSignal,
+): Promise<T> {
+	return await telegramRequest<T>(telegram, method, { body: form, timeoutMs: UPLOAD_TIMEOUT_MS, signal });
+}
+
+async function telegramRequest<T>(
+	telegram: TelegramClient,
+	method: string,
+	request: { readonly body: string | FormData; readonly headers?: Record<string, string>; readonly timeoutMs: number; readonly signal?: AbortSignal },
+): Promise<T> {
+	const timeout = AbortSignal.timeout(request.timeoutMs);
+	const response = await telegram.fetch(`${TELEGRAM_API}/bot${telegram.botToken}/${method}`, {
+		method: "POST",
+		...(request.headers === undefined ? {} : { headers: request.headers }),
+		body: request.body,
+		signal: request.signal === undefined ? timeout : AbortSignal.any([request.signal, timeout]),
 	});
 	const payload = (await response.json()) as TelegramResponse<T>;
 	if (!payload.ok) {
