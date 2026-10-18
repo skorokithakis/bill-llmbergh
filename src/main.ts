@@ -13,6 +13,7 @@ import { createCompanyModels } from "./providers.ts";
 import { connectToWorkVm } from "./remote.ts";
 import { createSupervisorExtension } from "./supervisor.ts";
 import { isStopped, startTelegram, stopSupervisor } from "./telegram.ts";
+import { createWebExtension } from "./web.ts";
 import { WorkerExtension } from "./workers.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -29,18 +30,23 @@ async function main(): Promise<void> {
 	registry.install(CodingTools);
 	// The worker extension holds the shared worker prompt; the supervisor extension holds the founder's tools and the
 	// worker task definitions. The root selects its extensions explicitly (see below); worker conversations select
-	// CodingTools and the worker extension, and spawn_worker adds the card extension if the role allows the card and
-	// the extension holding the custom tools for the role.
+	// CodingTools, the worker extension, and the web extension, and spawn_worker adds the card extension if the role
+	// allows the card and the extension holding the custom tools for the role.
 	const paymentCard = createPaymentCardExtension(secrets.card);
+	// Web search and fetch need the Ollama key, so they live in the container like the other supervisor tools. The
+	// extension is installed once, selected by the founder, and added to every worker's extensions by spawn_worker.
+	const web = createWebExtension(secrets.ollamaApiKey);
 	const supervisor = createSupervisorExtension({
 		defaultWorkerModel: config.models.defaultWorker,
 		maxParallelWorkers: config.maxParallelWorkers,
 		advisorModels: { anthropic: config.models.advisorAnthropic, openai: config.models.advisorOpenAI },
 		advisorCallsPerDay: config.advisorCallsPerDay,
 		paymentCardExtension: paymentCard,
+		webExtension: web,
 		registry,
 	});
 	registry.install(paymentCard);
+	registry.install(web);
 	registry.install(WorkerExtension);
 	registry.install(supervisor);
 
@@ -71,7 +77,7 @@ async function main(): Promise<void> {
 		{
 			model: config.models.founder,
 			instructions: FOUNDER_PROMPT,
-			extensions: [CodingTools, supervisor, paymentCard, customToolsSelector()],
+			extensions: [CodingTools, supervisor, paymentCard, web, customToolsSelector()],
 		},
 		context,
 	);

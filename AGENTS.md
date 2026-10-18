@@ -126,6 +126,13 @@ Founder and workers (can be turned on per role):
 
 - `get_payment_card()`: returns the card details. Every call sends a Telegram notice to the owner.
 
+Founder and every worker:
+
+- `web_search(query, max_results)`: searches the web through Ollama's web API and returns titles, URLs, and snippets.
+- `web_fetch(url)`: fetches one page through Ollama and returns its title, markdown content, and links.
+  Both are read-only and use `OLLAMA_API_KEY`, so they run in the container and the key never reaches the VM. Each
+  result is text cut to about 20000 characters, and the output says when it was cut.
+
 ### Custom tools (self-improvement)
 
 The founder can create and edit its own tools with `define_tool(name, description, parameters_schema, command, roles)`.

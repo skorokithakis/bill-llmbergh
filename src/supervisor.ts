@@ -22,6 +22,8 @@ export type SupervisorOptions = {
 	readonly advisorModels: Record<AdvisorName, ModelRef>;
 	readonly advisorCallsPerDay: number;
 	readonly paymentCardExtension: Extension;
+	// Installed once and selected for the founder here; spawn_worker adds it to every worker's extensions.
+	readonly webExtension: Extension;
 	// The tools that define custom tools reinstall the custom-tools extensions after every change.
 	readonly registry: Registry;
 };
