@@ -1,6 +1,6 @@
 {
 	"models": {
-		"founder": { "provider": "deepseek", "modelId": "deepseek-v4.1-flash" },
+		"founder": { "provider": "anthropic", "modelId": "claude-opus-5-5" },
 		"defaultWorker": { "provider": "deepseek", "modelId": "deepseek-v4.1-flash" },
 		"advisorAnthropic": { "provider": "anthropic", "modelId": "claude-opus-5-5" },
 		"advisorOpenAI": { "provider": "openai", "modelId": "gpt-6.1-sol" }
@@ -9,7 +9,7 @@
 	"heartbeatIntervalMinutes": 360,
 	"maxParallelWorkers": 3,
 	"advisorCallsPerDay": 5,
-	"dailyCostCapUsd": 20,
+	"dailyCostCapUsd": 50,
 	"vm": { "host": "2.31.47.177", "user": "root" },
 	"telegram": { "ownerUserId": 0 }
 }

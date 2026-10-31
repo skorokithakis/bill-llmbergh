@@ -74,7 +74,7 @@ stays on the VM. It cannot change the harness code, its permissions, or the secr
 
 - The root Durable conversation. Long-lived. Durable compacts it when it gets long.
 - Decides strategy, hires workers, spawns them, reads results, talks to the owner.
-- Model: DeepSeek served by Ollama Cloud (the owner's key is an Ollama Cloud key). Configurable.
+- Model: Claude Opus 5.5 on the Anthropic subscription through the owner's OAuth login (`/data/auth.json`), the same login as the Anthropic advisor. Configurable.
 - Input arrives as Durable submissions with a `requestId`, so a restart never delivers the same event twice:
   - `owner_message` from Telegram.
   - `worker_finished` when a worker ends (result, failure, or stop).
@@ -190,7 +190,7 @@ One JSON config file plus environment variables for secrets. The non-secret conf
 copied from `config.example.json` in the repository; it is not committed, so it lives in the data volume
 like the SSH key. It includes:
 
-- Models: founder and default worker (`deepseek-v4.1-flash` on Ollama Cloud), advisors `claude-opus-5-5` (Anthropic) and `gpt-6.1-sol` (OpenAI).
+- Models: founder `claude-opus-5-5` (Anthropic, through the owner's OAuth login) and default worker `deepseek-v4.1-flash` on Ollama Cloud, advisors `claude-opus-5-5` (Anthropic) and `gpt-6.1-sol` (OpenAI).
 - Heartbeat interval, maximum parallel workers, advisor calls per day, daily cost cap.
 - Work VM SSH host and user. The key and the `known_hosts` file are at fixed paths under `/data/ssh/`.
 - Telegram owner user ID.
@@ -245,7 +245,7 @@ Harbormaster clones this repository and runs `docker compose up --build` on it. 
 - `hook(ToolTask, { beforeTool })` can block a call: use it for the advisor and worker caps.
 - `harness.usage(context)` returns tokens and cost per `provider/model`.
 - `watchEvents(harness, conversationId, context)` gives coding-agent style events, if we need live logs.
-- `pi-ai` has DeepSeek, Anthropic, and OpenAI built in, but the owner's key is for Ollama Cloud (`https://ollama.com/v1`), so the founder's provider is `createProvider()` with that `baseUrl`, model id `deepseek-v4.1-flash`, `compat.supportsDeveloperRole: false`, and the DeepSeek pricing copied from the `deepseek-flash` catalog entry so cost is reported. Pitfall: a catalog model carries its own `baseUrl`, which overrides the provider's; set it on the model object too.
+- `pi-ai` has DeepSeek, Anthropic, and OpenAI built in, but the owner's key is for Ollama Cloud (`https://ollama.com/v1`), so the workers' provider is `createProvider()` with that `baseUrl`, model id `deepseek-v4.1-flash`, `compat.supportsDeveloperRole: false`, and the DeepSeek pricing copied from the `deepseek-flash` catalog entry so cost is reported. Pitfall: a catalog model carries its own `baseUrl`, which overrides the provider's; set it on the model object too. The founder uses pi-ai's built-in `anthropic` provider with the catalog model `claude-opus-5-5` and the owner's OAuth login.
 - `env.exec()` returns `{ exitCode, spillPath? }`; output arrives through `options.onOutput`.
 - Inside a task, `runtime.entry()` sees only the task's own conversation; read another conversation's entries with `tx.entry()` inside a commit.
 - Durable's example 23 is slightly stale against the 1.2.0 types: tool results are `{ output }`, not `{ content }`.

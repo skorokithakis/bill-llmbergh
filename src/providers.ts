@@ -104,7 +104,8 @@ export function createCompanyModels(config: Config, authFilePath: string): Mutab
 
 // The owner's key is an Ollama Cloud key, not a DeepSeek one, so this replaces pi-ai's built-in
 // `deepseek` provider. The provider id stays `deepseek` because that is what the config's model
-// references and the stored agent documents use. The catalog model carries its own `baseUrl`
+// references and the stored agent documents use. The founder is on Anthropic, so the model this
+// provider registers is the default worker's. The catalog model carries its own `baseUrl`
 // (api.deepseek.com) that overrides the provider's, so it is set on the model object too.
 function ollamaCloudProvider(config: Config): Provider {
 	const builtin = deepseekProvider();
@@ -120,7 +121,7 @@ function ollamaCloudProvider(config: Config): Provider {
 		models: [
 			{
 				...pricing,
-				id: config.models.founder.modelId,
+				id: config.models.defaultWorker.modelId,
 				baseUrl: config.ollamaCloudBaseUrl,
 				compat: { ...pricing.compat, supportsDeveloperRole: false },
 			},

@@ -9,7 +9,7 @@ export type Config = {
 		readonly advisorAnthropic: ModelRef;
 		readonly advisorOpenAI: ModelRef;
 	};
-	/** The one provider that is not a pi-ai built-in: DeepSeek served by Ollama Cloud. */
+	/** The one provider that is not a pi-ai built-in: DeepSeek served by Ollama Cloud, used by the workers. */
 	readonly ollamaCloudBaseUrl: string;
 	readonly heartbeatIntervalMinutes: number;
 	readonly maxParallelWorkers: number;
