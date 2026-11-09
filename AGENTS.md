@@ -190,7 +190,7 @@ One JSON config file plus environment variables for secrets. The non-secret conf
 copied from `config.example.json` in the repository; it is not committed, so it lives in the data volume
 like the SSH key. It includes:
 
-- Models: founder `claude-opus-5-5` (Anthropic, through the owner's OAuth login) and default worker `deepseek-v4.1-flash` on Ollama Cloud, advisors `claude-opus-5-5` (Anthropic) and `gpt-6.1-sol` (OpenAI).
+- Models: founder `claude-opus-5-5` (Anthropic, through the owner's OAuth login) and default worker `deepseek-v4.1-flash` on Ollama Cloud, advisors `claude-fable-5-2` (Anthropic) and `gpt-6.1-sol` (OpenAI).
 - Heartbeat interval, maximum parallel workers, advisor calls per day, daily cost cap.
 - Work VM SSH host and user. The key and the `known_hosts` file are at fixed paths under `/data/ssh/`.
 - Telegram owner user ID.
@@ -245,7 +245,7 @@ Harbormaster clones this repository and runs `docker compose up --build` on it. 
 - `hook(ToolTask, { beforeTool })` can block a call: use it for the advisor and worker caps.
 - `harness.usage(context)` returns tokens and cost per `provider/model`.
 - `watchEvents(harness, conversationId, context)` gives coding-agent style events, if we need live logs.
-- `pi-ai` has DeepSeek, Anthropic, and OpenAI built in, but the owner's key is for Ollama Cloud (`https://ollama.com/v1`), so the workers' provider is `createProvider()` with that `baseUrl`, model id `deepseek-v4.1-flash`, `compat.supportsDeveloperRole: false`, and the DeepSeek pricing copied from the `deepseek-flash` catalog entry so cost is reported. Pitfall: a catalog model carries its own `baseUrl`, which overrides the provider's; set it on the model object too. The founder uses pi-ai's built-in `anthropic` provider with the catalog model `claude-opus-5-5` and the owner's OAuth login.
+- `pi-ai` has DeepSeek, Anthropic, and OpenAI built in, but the owner's key is for Ollama Cloud (`https://ollama.com/v1`), so the workers' provider is `createProvider()` with that `baseUrl`, model id `deepseek-v4.1-flash`, `compat.supportsDeveloperRole: false`, and the DeepSeek pricing copied from the `deepseek-flash` catalog entry so cost is reported. Pitfall: a catalog model carries its own `baseUrl`, which overrides the provider's; set it on the model object too. The founder and the Anthropic advisor share one `createProvider()` Anthropic provider with the owner's OAuth login: the founder uses the catalog model `claude-opus-5-5`, while `claude-fable-5-2` for the advisor is added to the provider by copying the catalog's `claude-fable-5-1` entry, because the 1.2.0 catalog (and every release up to 1.5.0) lacks it. That entry also sets the header `user-agent: claude-cli/2.1.321`, because pi-ai's OAuth requests claim Claude Code 2.1.280 and Anthropic rejects Fable 5.2 below 2.1.290 (earendil-works/pi#11969). Both are temporary until a pi-ai release supports Fable 5.2.
 - `env.exec()` returns `{ exitCode, spillPath? }`; output arrives through `options.onOutput`.
 - Inside a task, `runtime.entry()` sees only the task's own conversation; read another conversation's entries with `tx.entry()` inside a commit.
 - Durable's example 23 is slightly stale against the 1.2.0 types: tool results are `{ output }`, not `{ content }`.

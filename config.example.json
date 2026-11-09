@@ -2,7 +2,7 @@
 	"models": {
 		"founder": { "provider": "anthropic", "modelId": "claude-opus-5-5" },
 		"defaultWorker": { "provider": "deepseek", "modelId": "deepseek-v4.1-flash" },
-		"advisorAnthropic": { "provider": "anthropic", "modelId": "claude-opus-5-5" },
+		"advisorAnthropic": { "provider": "anthropic", "modelId": "claude-fable-5-2" },
 		"advisorOpenAI": { "provider": "openai", "modelId": "gpt-6.1-sol" }
 	},
 	"ollamaCloudBaseUrl": "https://ollama.com/v1",

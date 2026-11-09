@@ -9,9 +9,11 @@ import {
 	type Credential,
 	type CredentialInfo,
 	type CredentialStore,
+	type Model,
 	type MutableModels,
 	type Provider,
 } from "@earendil-works/pi-ai";
+import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
@@ -97,7 +99,7 @@ export class FileCredentialStore implements CredentialStore {
 export function createCompanyModels(config: Config, authFilePath: string): MutableModels {
 	const models = createModels({ credentials: new FileCredentialStore(authFilePath) });
 	models.setProvider(ollamaCloudProvider(config));
-	models.setProvider(anthropicProvider());
+	models.setProvider(anthropicAdvisorProvider());
 	models.setProvider(openaiProvider());
 	return models;
 }
@@ -128,4 +130,45 @@ function ollamaCloudProvider(config: Config): Provider {
 		],
 		api: openAICompletionsApi(),
 	});
+}
+
+// pi-ai 1.2.0's Anthropic catalog ends at claude-fable-5-1, so the advisor's model is not there.
+// This wraps the built-in provider (same id/baseUrl/auth, so the owner's OAuth login and refresh
+// keep working) and appends an entry copied from 5.1. Anthropic publishes only the $8/$40 per
+// million input/output prices; the cache prices are a guess.
+const ANTHROPIC_ADVISOR_MODEL_ID = "claude-fable-5-2";
+
+function anthropicAdvisorProvider(): Provider {
+	const builtin = anthropicProvider();
+	const catalog = builtin.getModels();
+	const models = catalog.some((model) => model.id === ANTHROPIC_ADVISOR_MODEL_ID)
+		? catalog
+		: [...catalog, advisorModel(catalog)];
+	return createProvider({
+		id: builtin.id,
+		name: builtin.name,
+		baseUrl: builtin.baseUrl,
+		auth: builtin.auth,
+		models,
+		api: anthropicMessagesApi(),
+	});
+}
+
+function advisorModel(catalog: readonly Model<"anthropic-messages">[]): Model<"anthropic-messages"> {
+	const template = catalog.find((model) => model.id === "claude-fable-5-1");
+	if (template === undefined) {
+		throw new Error(
+			"pi-ai's Anthropic catalog no longer lists claude-fable-5-1, so the claude-fable-5-2 advisor model cannot be copied from it",
+		);
+	}
+	return {
+		...template,
+		id: ANTHROPIC_ADVISOR_MODEL_ID,
+		name: "Claude Fable 5.2",
+		cost: { input: 8, output: 40, cacheRead: 0.8, cacheWrite: 10 },
+		// On the OAuth login pi-ai claims to be Claude Code 2.1.280, and Anthropic rejects Fable 5.2 below
+		// 2.1.290 (400 claude_code_version_too_old, earendil-works/pi#11969). Model headers override pi-ai's,
+		// so only this model sends the newer version. Remove with this whole entry once a pi-ai release has it.
+		headers: { "user-agent": "claude-cli/2.1.321" },
+	};
 }
