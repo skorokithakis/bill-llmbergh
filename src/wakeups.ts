@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
+import { num, obj, str } from "@earendil-works/pi-schema";
 import {
 	defineDoc,
 	defineTool,
@@ -29,6 +29,8 @@ export const WakeupsDoc = defineDoc<{ wakeups: Record<string, Wakeup> }>({
 	history: "latest",
 	fork: "initial",
 	initial: () => ({ wakeups: {} }),
+	// The schedule is small and changes one wake-up at a time; ordinary changes stay deltas.
+	checkpointWhen: () => false,
 });
 
 // The documents belong to the root conversation, and the tools and the tick must address it directly rather than
@@ -42,11 +44,11 @@ export function createWakeupTools(): readonly ToolRegistration[] {
 			name: "schedule_wakeup",
 			description:
 				"Schedule a one-shot wake-up: after delay_minutes the harness starts a run of yours with your note as the instruction. Use it when the next useful thing cannot happen until a known later time (a deploy to check, a reply to wait for, metrics to read tomorrow), give the note everything you will need then, and end the turn instead of waiting. Do not use it to poll or busy-wait; check once at the time it matters.",
-			parameters: Type.Object({
-				delay_minutes: Type.Number({
+			parameters: obj({
+				delay_minutes: num({
 					description: "How many minutes from now the wake-up is due. Must be positive; there is no upper limit.",
 				}),
-				note: Type.String({
+				note: str({
 					description: "What to do when the wake-up fires. It is delivered back to you as the start of the run.",
 				}),
 			}),
@@ -70,7 +72,7 @@ export function createWakeupTools(): readonly ToolRegistration[] {
 		defineTool({
 			name: "list_wakeups",
 			description: "List the pending wake-ups with their id, due time, and note.",
-			parameters: Type.Object({}),
+			parameters: obj({}),
 			execute: async (_args, api, context) => {
 				const state = await api.snapshot(WakeupsDoc, ROOT, context);
 				const entries = Object.entries(state?.wakeups ?? {}).sort(([, a], [, b]) => a.dueAt.localeCompare(b.dueAt));
@@ -81,8 +83,8 @@ export function createWakeupTools(): readonly ToolRegistration[] {
 		defineTool({
 			name: "cancel_wakeup",
 			description: "Cancel a scheduled wake-up so it no longer runs.",
-			parameters: Type.Object({
-				id: Type.String({ description: "The wake-up id from schedule_wakeup or list_wakeups." }),
+			parameters: obj({
+				id: str({ description: "The wake-up id from schedule_wakeup or list_wakeups." }),
 			}),
 			execute: async (args, api, context) => {
 				const cancelled = await api.commit(async (tx) => {

@@ -201,7 +201,7 @@ Secrets from environment: `OLLAMA_API_KEY`, Telegram bot token, card details. Ad
 ## Stack
 
 - TypeScript on Node 22.19 or newer.
-- `@earendil-works/pi-durable`, `@earendil-works/pi-env`, `@earendil-works/pi-ai`, `@earendil-works/chord`, all pinned to 1.2.0.
+- `@earendil-works/pi-durable`, `@earendil-works/pi-env`, `@earendil-works/pi-ai`, `@earendil-works/chord`, `@earendil-works/pi-schema`, all pinned to 1.5.1.
 - Docker Compose for the harness container, deployed with Harbormaster (https://harbormaster.readthedocs.io/en/latest/llms.txt).
 - Keep dependencies few. Prefer Node built-ins.
 
@@ -237,18 +237,18 @@ Harbormaster clones this repository and runs `docker compose up --build` on it. 
 ## Pi facts (checked on 2026-10-13)
 
 - Repository: https://github.com/earendil-works/pi. Durable docs: `packages/durable/README.md`. pi-env docs: `packages/env/README.md`, `docs/protocol.md`, `docs/semantics.md`.
-- Durable is marked **Experimental**. First published 2026-09-19. Breaking changes in 1.1.0 (2026-10-07) and 1.2.0 (2026-10-12). We pin 1.2.0 and accept this.
+- Durable is marked **Experimental**. First published 2026-09-19. Breaking changes in most minor releases (1.1.0, 1.2.0, 1.3.0, 1.5.0). We pin 1.5.1 (upgraded from 1.2.0 on 2026-11-10) and accept this. Opening a 1.2.0 storage file with 1.5.1 migrates it one way.
 - `Harness.open(storage, { models, registry, env, settings }, context)`. Every async call takes a Chord `Context`; `BACKGROUND_CONTEXT` never cancels.
 - `harness.root(context, { agent })` is the founder's conversation. `conversation.submit({ type: "input", content, requestId })` is idempotent by `requestId`.
 - Busy conversation: `whenBusy: "steer"` enters after the current tool round; the default (follow-up) starts the next run.
-- Tools: `defineTool({ name, description, parameters (TypeBox), execute(args, api, context), replay? })`, bundled in `defineExtension({ name, tools, sections, hooks })`, installed with `registry.install()`. Tools run in the container. `api.executeTool("bash", ...)` or the `ExecutionEnv` reaches the VM.
+- Tools: `defineTool({ name, description, parameters (JSON Schema, built with `@earendil-works/pi-schema`; pi-ai no longer exports TypeBox's `Type`), execute(args, api, context), replay? })`, bundled in `defineExtension({ name, tools, sections, hooks })`, installed with `registry.install()`. Tools run in the container. `api.executeTool("bash", ...)` or the `ExecutionEnv` reaches the VM.
 - `hook(ToolTask, { beforeTool })` can block a call: use it for the advisor and worker caps.
 - `harness.usage(context)` returns tokens and cost per `provider/model`.
-- `watchEvents(harness, conversationId, context)` gives coding-agent style events, if we need live logs.
-- `pi-ai` has DeepSeek, Anthropic, and OpenAI built in, but the owner's key is for Ollama Cloud (`https://ollama.com/v1`), so the workers' provider is `createProvider()` with that `baseUrl`, model id `deepseek-v4.1-flash`, `compat.supportsDeveloperRole: false`, and the DeepSeek pricing copied from the `deepseek-flash` catalog entry so cost is reported. Pitfall: a catalog model carries its own `baseUrl`, which overrides the provider's; set it on the model object too. The founder and the Anthropic advisor share one `createProvider()` Anthropic provider with the owner's OAuth login: the founder uses the catalog model `claude-opus-5-5`, while `claude-fable-5-2` for the advisor is added to the provider by copying the catalog's `claude-fable-5-1` entry, because the 1.2.0 catalog (and every release up to 1.5.0) lacks it. That entry also sets the header `user-agent: claude-cli/2.1.321`, because pi-ai's OAuth requests claim Claude Code 2.1.280 and Anthropic rejects Fable 5.2 below 2.1.290 (earendil-works/pi#11969). Both are temporary until a pi-ai release supports Fable 5.2.
+- `pi-ai` has DeepSeek, Anthropic, and OpenAI built in, but the owner's key is for Ollama Cloud (`https://ollama.com/v1`), so the workers' provider is `createProvider()` with that `baseUrl`, model id `deepseek-v4.1-flash`, `compat.supportsDeveloperRole: false`, and the DeepSeek pricing copied from the `deepseek-flash` catalog entry so cost is reported. Pitfall: a catalog model carries its own `baseUrl`, which overrides the provider's; set it on the model object too. The founder (`claude-opus-5-5`) and the Anthropic advisor (`claude-fable-5-2`) use the stock catalog `anthropicProvider()` with the owner's OAuth login. pi-ai 1.5.1 still claims Claude Code 2.1.280 on OAuth and Anthropic rejects Fable 5.2 below 2.1.290 (earendil-works/pi#11969), so `ask_advisor` sends `user-agent: claude-cli/2.1.321` on the Anthropic advisor call only. Remove it once pi-ai sends 2.1.290 or newer.
 - `env.exec()` returns `{ exitCode, spillPath? }`; output arrives through `options.onOutput`.
 - Inside a task, `runtime.entry()` sees only the task's own conversation; read another conversation's entries with `tx.entry()` inside a commit.
 - Durable's example 23 is slightly stale against the 1.2.0 types: tool results are `{ output }`, not `{ content }`.
+- 1.5.x: `Context` imports from `@earendil-works/chord/context`; `defineDoc` needs `checkpointWhen`; `viewState()` and `watchEvents()` are gone (use `Conversation.watch()`).
 - `harness.resume()` is synchronous and takes no context.
 - The first VM operation pays for platform detection and daemon upload. Warm the connection at startup.
 - The coding-agent SDK (`createAgentSession`) was the rejected alternative. Its tools accept SSH `operations`, but we would have to write durable workers, the inbox, and cost totals ourselves.

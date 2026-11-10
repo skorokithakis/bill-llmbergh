@@ -1,5 +1,5 @@
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
+import { int, obj, opt, str } from "@earendil-works/pi-schema";
 import { defineExtension, defineTool, type Extension } from "@earendil-works/pi-durable";
 
 // Web search and page fetch through Ollama's web API, for the founder and every worker. They run in the container
@@ -24,10 +24,10 @@ export function createWebExtension(apiKey: string): Extension {
 				name: "web_search",
 				description:
 					"Search the web with Ollama's web search API. Returns up to max_results pages with a title, URL, and content snippet each, as text.",
-				parameters: Type.Object({
-					query: Type.String({ description: "The search query." }),
-					max_results: Type.Optional(
-						Type.Integer({
+				parameters: obj({
+					query: str({ description: "The search query." }),
+					max_results: opt(
+						int({
 							minimum: 1,
 							maximum: 10,
 							description: "How many results to return, from 1 to 10. Default 5.",
@@ -50,8 +50,8 @@ export function createWebExtension(apiKey: string): Extension {
 				name: "web_fetch",
 				description:
 					"Fetch one web page through Ollama's web fetch API. Returns the page's title, its main content as markdown, and the links found on it, as text.",
-				parameters: Type.Object({
-					url: Type.String({ description: "The URL of the page to fetch." }),
+				parameters: obj({
+					url: str({ description: "The URL of the page to fetch." }),
 				}),
 				execute: async (args, _api, context) => {
 					const response = await postJson(FETCH_URL, apiKey, { url: args.url }, context);

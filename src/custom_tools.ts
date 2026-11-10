@@ -1,5 +1,5 @@
-import { type Context } from "@earendil-works/chord";
-import { type TSchema, Type } from "@earendil-works/pi-ai";
+import { type Context } from "@earendil-works/chord/context";
+import { arr, map, obj, opt, str, unknown, type Schema } from "@earendil-works/pi-schema";
 import {
 	defineDoc,
 	defineExtension,
@@ -32,6 +32,8 @@ export const CustomToolsDoc = defineDoc<{ tools: Record<string, CustomTool> }>({
 	history: "latest",
 	fork: "initial",
 	initial: () => ({ tools: {} }),
+	// The definitions are small and change one tool at a time; ordinary changes stay deltas.
+	checkpointWhen: () => false,
 });
 
 const ROOT = ROOT_CONVERSATION_ID;
@@ -81,8 +83,8 @@ function createCustomTool(name: string, tool: CustomTool): ToolRegistration {
 	return defineTool({
 		name,
 		description: tool.description,
-		// TypeBox schemas are plain JSON schema objects, so a stored schema is one as far as Durable is concerned.
-		parameters: tool.parameters as TSchema,
+		// A stored schema is a plain JSON schema object, which is what Durable validates the arguments against.
+		parameters: tool.parameters as Schema,
 		// Not replay-safe, the default: a command that was interrupted may have had an effect, so it must come back to the
 		// model as interrupted instead of being run again.
 		execute: async (args, api, context) => {
@@ -118,7 +120,7 @@ export type CustomToolManagementOptions = {
 // Model APIs restrict tool names to this shape, and an invalid name would make every request that offers the tool fail.
 const NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
-const ParametersSchema = Type.Record(Type.String(), Type.Unknown(), {
+const ParametersSchema = map(unknown(), {
 	description:
 		'A JSON schema object describing the arguments, for example {"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}. The type must be "object".',
 });
@@ -144,12 +146,12 @@ export function createCustomToolManagementTools(options: CustomToolManagementOpt
 			name: "define_tool",
 			description:
 				"Define a custom tool: a shell command that runs on the work VM. It receives the call's arguments as JSON on stdin (also in the TOOL_ARGS environment variable); its stdout is the result, and a non-zero exit code is an error. It can only do what bash on the VM can already do. The tool is available from your next request. roles lists the roles whose workers also get it.",
-			parameters: Type.Object({
-				name: Type.String({ description: "Lowercase letters, digits, and underscores, starting with a letter. Must not match an existing tool." }),
-				description: Type.String({ description: "What the tool does and when to use it; this is what the model reads." }),
+			parameters: obj({
+				name: str({ description: "Lowercase letters, digits, and underscores, starting with a letter. Must not match an existing tool." }),
+				description: str({ description: "What the tool does and when to use it; this is what the model reads." }),
 				parameters: ParametersSchema,
-				command: Type.String({ description: "The shell command to run on the VM. Read the JSON arguments from stdin, for example with jq." }),
-				roles: Type.Optional(Type.Array(Type.String(), { description: "Roles whose workers get the tool. Default none: founder only." })),
+				command: str({ description: "The shell command to run on the VM. Read the JSON arguments from stdin, for example with jq." }),
+				roles: opt(arr(str(), { description: "Roles whose workers get the tool. Default none: founder only." })),
 			}),
 			execute: async (args, api, context) => {
 				if (!NAME_PATTERN.test(args.name)) return errorResult(`Invalid name "${args.name}": use lowercase letters, digits, and underscores, starting with a letter.`);
@@ -176,12 +178,12 @@ export function createCustomToolManagementTools(options: CustomToolManagementOpt
 		defineTool({
 			name: "update_tool",
 			description: "Change a custom tool. Fields you leave out stay as they are. The change is available from your next request.",
-			parameters: Type.Object({
-				name: Type.String({ description: "The custom tool to change." }),
-				description: Type.Optional(Type.String({ description: "The new description." })),
-				parameters: Type.Optional(ParametersSchema),
-				command: Type.Optional(Type.String({ description: "The new shell command." })),
-				roles: Type.Optional(Type.Array(Type.String(), { description: "The new list of roles; it replaces the old one." })),
+			parameters: obj({
+				name: str({ description: "The custom tool to change." }),
+				description: opt(str({ description: "The new description." })),
+				parameters: opt(ParametersSchema),
+				command: opt(str({ description: "The new shell command." })),
+				roles: opt(arr(str(), { description: "The new list of roles; it replaces the old one." })),
 			}),
 			execute: async (args, api, context) => {
 				if (
@@ -215,8 +217,8 @@ export function createCustomToolManagementTools(options: CustomToolManagementOpt
 		defineTool({
 			name: "delete_tool",
 			description: "Delete a custom tool. It is gone from your next request.",
-			parameters: Type.Object({
-				name: Type.String({ description: "The custom tool to delete." }),
+			parameters: obj({
+				name: str({ description: "The custom tool to delete." }),
 			}),
 			execute: async (args, api, context) => {
 				const deleted = await api.commit(async (tx) => {

@@ -1,5 +1,6 @@
-import { type Context } from "@earendil-works/chord";
-import { type AssistantMessage, Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { bool, obj, opt, str } from "@earendil-works/pi-schema";
 import {
 	AssistantEntry,
 	configure,
@@ -50,6 +51,8 @@ export const RolesDoc = defineDoc<{ roles: Record<string, Role> }>({
 	history: "latest",
 	fork: "initial",
 	initial: () => ({ roles: {} }),
+	// A role changes by a few fields at a time; ordinary changes stay deltas, as for the workers document.
+	checkpointWhen: () => false,
 });
 
 export const WorkersDoc = defineDoc<{ workers: Record<string, WorkerRecord> }>({
@@ -59,6 +62,8 @@ export const WorkersDoc = defineDoc<{ workers: Record<string, WorkerRecord> }>({
 	history: "latest",
 	fork: "initial",
 	initial: () => ({ workers: {} }),
+	// A worker record changes a few times in its life and is small; ordinary changes stay deltas.
+	checkpointWhen: () => false,
 });
 
 // The root is the only founder conversation, and the worker documents belong to it, so the tools and /status address
@@ -182,15 +187,11 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 			name: "hire_role",
 			description:
 				"Hire a role: a named set of instructions and a model. Workers are spawned from a role with spawn_worker. The only model value today is \"default\". A role with payment_card true lets its workers read the company payment card.",
-			parameters: Type.Object({
-				name: Type.String({ description: "A short name for the role, such as developer or marketer." }),
-				instructions: Type.String({ description: "What a worker of this role is and how it should work." }),
-				model: Type.Optional(
-					Type.String({ description: 'The model workers of this role run on. The only value today is "default".' }),
-				),
-				payment_card: Type.Optional(
-					Type.Boolean({ description: "Whether workers of this role may call get_payment_card. Default false." }),
-				),
+			parameters: obj({
+				name: str({ description: "A short name for the role, such as developer or marketer." }),
+				instructions: str({ description: "What a worker of this role is and how it should work." }),
+				model: opt(str({ description: 'The model workers of this role run on. The only value today is "default".' })),
+				payment_card: opt(bool({ description: "Whether workers of this role may call get_payment_card. Default false." })),
 			}),
 			execute: async (args, api, context) => {
 				const model = args.model ?? "default";
@@ -212,13 +213,11 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 		defineTool({
 			name: "update_role",
 			description: "Change a role's instructions, model, or card access. Fields you leave out stay as they are.",
-			parameters: Type.Object({
-				name: Type.String({ description: "The role to change." }),
-				instructions: Type.Optional(Type.String({ description: "The new instructions." })),
-				model: Type.Optional(Type.String({ description: 'The new model. The only value today is "default".' })),
-				payment_card: Type.Optional(
-					Type.Boolean({ description: "Whether workers of this role may call get_payment_card." }),
-				),
+			parameters: obj({
+				name: str({ description: "The role to change." }),
+				instructions: opt(str({ description: "The new instructions." })),
+				model: opt(str({ description: 'The new model. The only value today is "default".' })),
+				payment_card: opt(bool({ description: "Whether workers of this role may call get_payment_card." })),
 			}),
 			execute: async (args, api, context) => {
 				if (args.instructions === undefined && args.model === undefined && args.payment_card === undefined) {
@@ -244,8 +243,8 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 			name: "fire_role",
 			description:
 				"Remove a role. Workers already spawned from it keep running; only future spawn_worker calls cannot use it.",
-			parameters: Type.Object({
-				name: Type.String({ description: "The role to remove." }),
+			parameters: obj({
+				name: str({ description: "The role to remove." }),
 			}),
 			execute: async (args, api, context) => {
 				const removed = await api.commit(async (tx) => {
@@ -262,9 +261,9 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 			name: "spawn_worker",
 			description:
 				"Start a worker from a role, in the background, and return its worker id at once. The worker's final answer arrives later as a user message starting \"[worker <id> (<role>) finished:\". Give the task all the context the worker needs; it cannot see this conversation.",
-			parameters: Type.Object({
-				role: Type.String({ description: "The name of a role hired with hire_role." }),
-				task: Type.String({
+			parameters: obj({
+				role: str({ description: "The name of a role hired with hire_role." }),
+				task: str({
 					description: "The self-contained task for the worker: context, exact commands, and what to report.",
 				}),
 			}),
@@ -328,7 +327,7 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 		defineTool({
 			name: "list_workers",
 			description: "List every worker with its id, role, status, and task.",
-			parameters: Type.Object({}),
+			parameters: obj({}),
 			execute: async (_args, api, context) => {
 				const workers = await api.snapshot(WorkersDoc, ROOT, context);
 				const lines = Object.entries(workers?.workers ?? {}).map(
@@ -344,9 +343,9 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 			name: "message_worker",
 			description:
 				"Send a running worker more instructions. A steer reaches the worker after its current tool round, so it joins the work in progress rather than starting a new task.",
-			parameters: Type.Object({
-				worker_id: Type.String({ description: "The worker id from spawn_worker or list_workers." }),
-				text: Type.String({ description: "What to tell the worker." }),
+			parameters: obj({
+				worker_id: str({ description: "The worker id from spawn_worker or list_workers." }),
+				text: str({ description: "What to tell the worker." }),
 			}),
 			execute: async (args, api, context) => {
 				const worker = await findWorker(api, args.worker_id, context);
@@ -361,8 +360,8 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 		defineTool({
 			name: "stop_worker",
 			description: "Stop a running worker: it abandons its current work and reports as stopped.",
-			parameters: Type.Object({
-				worker_id: Type.String({ description: "The worker id from spawn_worker or list_workers." }),
+			parameters: obj({
+				worker_id: str({ description: "The worker id from spawn_worker or list_workers." }),
 			}),
 			execute: async (args, api, context) => {
 				const worker = await findWorker(api, args.worker_id, context);
@@ -378,8 +377,8 @@ export function createWorkerTools(options: WorkerToolOptions): readonly ToolRegi
 			name: "read_worker_transcript",
 			description:
 				"Show the most recent part of a worker's conversation as lines of role: text, oldest first within that part. Earlier history is cut off, so a long worker's start is not shown. Use it to see what a worker actually did and how it ended.",
-			parameters: Type.Object({
-				worker_id: Type.String({ description: "The worker id from spawn_worker or list_workers." }),
+			parameters: obj({
+				worker_id: str({ description: "The worker id from spawn_worker or list_workers." }),
 			}),
 			execute: async (args, api, context) => {
 				const worker = await findWorker(api, args.worker_id, context);

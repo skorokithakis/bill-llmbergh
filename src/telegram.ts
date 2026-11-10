@@ -1,4 +1,4 @@
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { defineDoc, type Conversation, type Harness } from "@earendil-works/pi-durable";
 import { advisorCallsToday, costToday } from "./money.ts";
 import { runningWorkers } from "./workers.ts";
@@ -63,6 +63,8 @@ const ControlDoc = defineDoc<{ stopped: boolean; telegramOffset: number }>({
 	history: "latest",
 	fork: "initial",
 	initial: () => ({ stopped: false, telegramOffset: 0 }),
+	// Two small fields change one at a time; ordinary changes stay deltas.
+	checkpointWhen: () => false,
 });
 
 // Configured once by startTelegram and read by sendToOwner from any supervisor tool. That function's

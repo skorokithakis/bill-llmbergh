@@ -1,4 +1,4 @@
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import { LiveDoc, type Conversation, type Harness } from "@earendil-works/pi-durable";
 import { isStopped } from "./telegram.ts";
 import { fireDueWakeups } from "./wakeups.ts";
@@ -23,8 +23,10 @@ export async function startHeartbeat(
 	let lastActivityMs = Date.now();
 	let inFlight: Promise<void> | undefined;
 
-	const view = await root.viewState(context);
-	const unsubscribe = view.subscribe(() => {
+	// Every commit to the conversation counts as activity. A watch starts with the current value and then gets
+	// each revision, which is all the old `viewState().subscribe()` gave this function.
+	const watch = await root.watch(context);
+	watch.start(async () => {
 		lastActivityMs = Date.now();
 	});
 
@@ -51,8 +53,7 @@ export async function startHeartbeat(
 	}, TICK_MS);
 	return async () => {
 		clearInterval(timer);
-		unsubscribe();
-		view.dispose();
+		await watch.stop();
 		// A tick that fired just before the stop could still be admitting a heartbeat; let it finish
 		// before the harness closes so shutdown does not race it.
 		await inFlight;

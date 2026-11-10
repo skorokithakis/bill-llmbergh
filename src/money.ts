@@ -1,5 +1,6 @@
-import type { Context } from "@earendil-works/chord";
-import { type AssistantMessage, Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
+import { lit, obj, str, union } from "@earendil-works/pi-schema";
 import {
 	defineDoc,
 	defineExtension,
@@ -42,6 +43,8 @@ export const CountersDoc = defineDoc<Counters>({
 	// `day` starts empty so the first read rolls the counters and captures the session total then, rather than
 	// treating a document created mid-day as the start of the day (which would credit the whole total to today).
 	initial: () => ({ day: "", costAtDayStart: 0, advisorCalls: 0 }),
+	// Ordinary changes stay deltas; the counters change by a few fields at a time.
+	checkpointWhen: () => false,
 });
 
 export type AdvisorName = "anthropic" | "openai";
@@ -69,11 +72,11 @@ function createAskAdvisorTool(options: MoneyOptions): ToolRegistration {
 		name: "ask_advisor",
 		description:
 			"Ask one of two senior advisors a single question. They are expensive and limited to a few calls a day, and they have no tools, memory, or access to your work, so put every fact the advisor needs into the question. The answer, and the tokens it cost, come back in the result.",
-		parameters: Type.Object({
-			advisor: Type.Union([Type.Literal("anthropic"), Type.Literal("openai")], {
+		parameters: obj({
+			advisor: union([lit("anthropic"), lit("openai")], {
 				description: "Which advisor to ask. Both are senior and expensive; use the one whose strength fits the question.",
 			}),
-			question: Type.String({
+			question: str({
 				description: "The full question, including all the context the advisor needs. It cannot ask you for more.",
 			}),
 		}),
@@ -96,6 +99,11 @@ function createAskAdvisorTool(options: MoneyOptions): ToolRegistration {
 				// Without this, /stop, the cost cap, and shutdown would abort the tool call but leave the
 				// expensive advisor request running to completion.
 				signal: context.abortSignal,
+				// pi-ai 1.5.1's Anthropic OAuth path still claims Claude Code 2.1.280, and Anthropic rejects Fable 5.2
+				// below 2.1.290 (400 claude_code_version_too_old, earendil-works/pi#11969). Per-call headers override
+				// pi-ai's defaults, so only the Anthropic advisor sends the newer version. Drop this once pi-ai sends
+				// 2.1.290 or newer by itself.
+				...(args.advisor === "anthropic" ? { headers: { "user-agent": "claude-cli/2.1.321" } } : {}),
 			});
 			const text = assistantText(answer);
 			// The usage rides on the result so it reaches pi.usage and the daily cost cap, exactly as a model
@@ -141,7 +149,7 @@ export function createPaymentCardExtension(card: Secrets["card"]): Extension {
 				name: "get_payment_card",
 				description:
 					"Return the company payment card's number, expiry, CVC, and name. Every read is reported to the owner, so use it only when a real payment is being made.",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				// Reading the card is an external effect (the owner is notified), so an interrupted call must not
 				// silently rerun and read it twice.
 				execute: async (_args, api, context) => {

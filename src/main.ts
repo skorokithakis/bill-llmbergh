@@ -57,11 +57,11 @@ async function main(): Promise<void> {
 
 	const harness = await Harness.open(
 		await openNodeSqliteStorage(resolve(dataDir, "harness.sqlite")),
-		{ models, registry, env: () => workVm.environment(), onReport: (error) => console.error("harness report:", error) },
+		{ models, registry, env: () => workVm.environment(), onReport: (report) => console.error("harness report:", report.kind, report.error) },
 		context,
 	);
 	harness.closed.then((end) => {
-		if (end.reason === "failed") console.error("harness closed after a storage failure:", end.error);
+		if (end.kind === "failed") console.error("harness closed after a storage failure:", end.error);
 	});
 
 	const root = await harness.root(context);

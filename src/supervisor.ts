@@ -1,6 +1,6 @@
 import { posix } from "node:path";
-import type { Context } from "@earendil-works/chord";
-import { Type } from "@earendil-works/pi-ai";
+import type { Context } from "@earendil-works/chord/context";
+import { obj, opt, str } from "@earendil-works/pi-schema";
 import {
 	defineExtension,
 	defineTool,
@@ -35,8 +35,8 @@ const MessageOwnerTool = defineTool({
 	name: "message_owner",
 	description:
 		"Send a Telegram message to the owner. Use it to report progress, answer the owner, or ask for something you cannot do yourself. Long messages are split into several Telegram messages.",
-	parameters: Type.Object({
-		text: Type.String({ description: "The message to send to the owner." }),
+	parameters: obj({
+		text: str({ description: "The message to send to the owner." }),
 	}),
 	// Deliberately not replay-safe: sending a message is an external effect, so an interrupted call
 	// must come back to the model as interrupted instead of being sent again on restart.
@@ -49,11 +49,9 @@ const MessageOwnerTool = defineTool({
 const SendFileTool = defineTool({
 	name: "send_file",
 	description: `Send one file from the work VM to the owner as a Telegram document, with an optional caption. Telegram accepts documents up to ${MAX_DOCUMENT_BYTES / (1024 * 1024)} MB and captions up to ${MAX_CAPTION_LENGTH} characters. Use it for results the owner should have as a file (a report, an archive, an image, a database dump); use message_owner for text.`,
-	parameters: Type.Object({
-		path: Type.String({ description: "Path of the file on the work VM. A directory or a missing path is an error." }),
-		caption: Type.Optional(
-			Type.String({ description: `Optional caption shown with the file, at most ${MAX_CAPTION_LENGTH} characters.` }),
-		),
+	parameters: obj({
+		path: str({ description: "Path of the file on the work VM. A directory or a missing path is an error." }),
+		caption: opt(str({ description: `Optional caption shown with the file, at most ${MAX_CAPTION_LENGTH} characters.` })),
 	}),
 	// Not replay-safe, like message_owner and for the same reason: an interrupted call must not upload twice.
 	execute: async (args, api, context) => {
